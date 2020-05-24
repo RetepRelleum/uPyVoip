@@ -4,7 +4,7 @@ import time
 
 import _thread
 import os
-import uPySip.uLaw
+import uPySip.aLaw
 
 
 
@@ -12,11 +12,10 @@ class PcmA:
     def __init__(self, port: int, serverIp: str, clientIp):
         self.logg = False
         self.logger = uPySip.tools.getLogger(__name__)
-        self.logger.info(
-            "__init_pcmu port {} server {}: \r\n\r\n".format(port, serverIp))
+        self.logger.info("__init_pcmu port {} server {}: \r\n\r\n".format(port, serverIp))
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.server_addressR = (clientIp, 17000)
-        self.server_addressS = (serverIp, port)
+        self.server_addressR = socket.getaddrinfo(clientIp, 17000)[0][-1]
+        self.server_addressS = socket.getaddrinfo(serverIp, port)[0][-1]
         self.sock.settimeout(10)
         self.sock.bind(self.server_addressR)
 
@@ -47,10 +46,10 @@ class PcmA:
         while self.run:
             try:
                 x+=1
-                b.append(uPySip.uLaw.linear2alaw(uPySip.uLaw.getSin(x)))
+                b.append(uPySip.aLaw.linear2alaw(uPySip.aLaw.getSin(x)))
                 if (len(b) == 172):
                     x=0
-                    tx = tx+0.02
+                    tx += 0.02
                     if (time.time()-tx < 0):
                         time.sleep(abs(time.time()-tx))
                     send = self.sock.sendto(bytes(b), self.server_addressS)

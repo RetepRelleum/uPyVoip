@@ -1,15 +1,10 @@
-import socket
-import sys
-import _thread
-import time
 import uPySip.tools
 import uPySip.sipMachine
-import os
-
+import sys
+import time
 
 
 logger = uPySip.tools.getLogger(__name__)
-
 uPySip.tools.basicConfig(level=uPySip.tools.DEBUG)
 
 
