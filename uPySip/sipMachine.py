@@ -5,10 +5,9 @@ import uPySip.tools
 import uPySip.pcmA
 import time
 import socket
-import gc
 
-import psutil
-import os 
+
+
 
 
 

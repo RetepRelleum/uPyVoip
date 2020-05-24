@@ -45,8 +45,8 @@ class PcmA:
         x=0
         while self.run:
             try:
-                x+=1
-                b.append(uPySip.aLaw.linear2alaw(uPySip.aLaw.getSin(x)))
+                for x in range(0,160):
+                    b.append(uPySip.aLaw.linear2alaw(uPySip.aLaw.getSin(x)))
                 if (len(b) == 172):
                     x=0
                     tx += 0.02
@@ -70,7 +70,7 @@ class PcmA:
                             bytes(b)[12], bytes(b)[13], bytes(b)[14], bytes(b)[15]), end='')
                         print('  {: >10} '.format(int.from_bytes(
                             bytes(b)[12:16], byteorder='big')))
-                    b.clear()
+                    b=bytearray()
                     b.append(0x80)
                     b.append(0x08)
                     t = time.time()
@@ -83,10 +83,8 @@ class PcmA:
                     b.append(self.SSRC[2])
                     b.append(self.SSRC[3])
 
-            except socket.error as msg:
-                print("Socket Error: %s" % msg)
-            except TypeError as msg:
-                print("Type Error: %s" % msg)
+            except OSError  as msg:
+                print("Socket Error: {}".format( msg))
         self.sock.close()
         self.logger.info("pcmu send end: \r\n\r\n")
 
@@ -119,9 +117,8 @@ class PcmA:
 #                print(' {:08b} {:08b} {:08b} {:08b}'.format(data[16], data[17], data[18], data[19]),end='')
 #                print('  {: >10} '.format(int.from_bytes(data[16:20], byteorder='big' )))
 
-            except socket.error as msg:
-                print("Socket Error: %s" % msg)
-            except TypeError as msg:
-                print("Type Error: %s" % msg)
+            except OSError as msg :
+                print("Socket Error: {}".format(msg))
+
         self.logger.info("pcmu recive end: \r\n\r\n")
 

@@ -5,7 +5,7 @@ import time
 
 
 logger = uPySip.tools.getLogger(__name__)
-uPySip.tools.basicConfig(level=uPySip.tools.DEBUG)
+
 
 
 port=5060
@@ -17,9 +17,11 @@ telid2=226
 if sys.platform=='linux':
     client=client1
     telId=telId1
+    uPySip.tools.basicConfig(level=uPySip.tools.DEBUG)
 else:
     client=client2
     telId=telid2
+    uPySip.tools.basicConfig(level=uPySip.tools.WARNING)
 
 sipMachine=uPySip.sipMachine.SipMachine(user='relleum', pwd='jutkk7x1',telNrA=telId,UserAgentA="b2b.domain",userClient=client,ProxyServer=server)
 timestamp= time.time()
