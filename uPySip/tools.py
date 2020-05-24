@@ -97,7 +97,7 @@ def basicConfig(level=INFO, filename=None, stream=None, format=None):
     if filename is not None:
         print("logging.basicConfig: filename arg is not supported")
     if format is not None:
-        print("logging.basicConfig: format arg is not supported")
+        print("logging.basicConfig: format arg is not supported") 
 
 
 def randomChr(size):
