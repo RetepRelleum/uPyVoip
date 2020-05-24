@@ -5,10 +5,7 @@ import uPySip.tools
 import uPySip.pcmA
 import time
 import socket
-
-
-
-
+import select
 
 
 
@@ -36,18 +33,26 @@ class SipMachine:
         self.tagTo = ''
         self.callId = uPySip.tools.randomChr(6)
         self.expires = 3600
-
-
         self.sockW = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
+        self.sock_read = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        server_address = socket.getaddrinfo('0.0.0.0',port)[0][-1]
+        self.sock_read.bind(server_address)
 
         self.nonceCount = 0
-        self.threadId=_thread.start_new_thread( self.readData, (self.port,))
+
+        self.polling_object = select.poll()
+        self.polling_object.register(self.sock_read)
 
         self.logger.debug('Start thread ')
         self.sipRegisterUnauthorized()
    
-
+    def loop(self):
+        ready_list = self.polling_object.poll()
+        print(ready_list)
+        for fd in ready_list: 
+            if fd[0] == self.sock_read.fileno() or fd[0] == self.sock_read:
+                self.readData(self.port)
+        return True
 
     def sipOKBy(self,toB,viaB,fromB,cSeqB):
         ret = '{}{}'.format('SIP/2.0 200 OK',self.RN)
@@ -370,20 +375,13 @@ class SipMachine:
                 self.pcmA=None
             self.sipOKBy(toB,viaB,fromB,cSeqB)
 
-
-
-
     def readData(self,port):
-        sock_read = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        server_address = socket.getaddrinfo('0.0.0.0',port)[0][-1]
-        sock_read.bind(server_address)
-        while True:
-            try:
-                (data, server )= sock_read.recvfrom(1024)
-                self.logger.info("readData form {}:{}{}{}".format(server,self.RN,self.RN,data.decode()))
-                self.parser(data)
-            except OSError as e:
-                self.logger.error("exception from sock_read.recvfrom {}".format(e))
+        try:
+            (data, server )= self.sock_read.recvfrom(1024)
+            self.logger.info("readData form {}:{}{}{}".format(server,self.RN,self.RN,data.decode()))
+            self.parser(data)
+        except OSError as e:
+            self.logger.error("exception from sock_read.recvfrom {}".format(e))
 
     def write(self,message):
         server_address = socket.getaddrinfo(self.ProxyServer, self.port)[0][-1]

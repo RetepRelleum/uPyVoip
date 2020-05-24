@@ -26,6 +26,7 @@ else:
 sipMachine=uPySip.sipMachine.SipMachine(user='relleum', pwd='jutkk7x1',telNrA=telId,UserAgentA="b2b.domain",userClient=client,ProxyServer=server)
 timestamp= time.time()
 
-while timestamp+9900>time.time():
- #   sipMachine.run()
-    time.sleep(0.1)
+loop=True
+
+while loop:
+    loop=sipMachine.loop()
