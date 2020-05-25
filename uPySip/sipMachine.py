@@ -2,18 +2,17 @@
 import _thread
 import uPySip.md5
 import uPySip.tools
-import uPySip.pcmA
 import time
 import socket
 import select
-
+import uPySip.aLaw
 
 
 class SipMachine:
     RN='\r\n'
     INVITE='INVITE'
     REGISTER='REGISTER'
-    def __init__(self, user='', pwd='', telNrA=225, UserAgentA="b2b.domain", userClient="192.168.1.130", ProxyServer='192.168.1.1', port=5060):
+    def __init__(self, user='', pwd='', telNrA=225, UserAgentA="b2b.domain", userClient="192.168.1.130", server='192.168.1.1', port=5060):
 
         self.user = user
         self.pwd = pwd
@@ -22,10 +21,10 @@ class SipMachine:
         self.UserAgentA = UserAgentA
         self.UserAgentB = UserAgentA
         self.userClient = userClient
-        self.ProxyServer = ProxyServer
+        self.server = server
         self.logger = uPySip.tools.getLogger(__name__)
         self.port = port
-        self.pcmA=None
+  
 
         self.cSeq = 1
         self.branch = 'z9hG4bK-{}'.format(uPySip.tools.randomChr(30))
@@ -38,20 +37,42 @@ class SipMachine:
         server_address = socket.getaddrinfo('0.0.0.0',port)[0][-1]
         self.sock_read.bind(server_address)
 
+
+        self.server_addressR = socket.getaddrinfo(self.userClient, 17000)[0][-1]       
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(self.server_addressR)
+
+        self.SSRC = uPySip.tools.randomChr(4).encode()
+
         self.nonceCount = 0
 
         self.polling_object = select.poll()
         self.polling_object.register(self.sock_read)
+        self.polling_object.register(self.sock)
 
         self.logger.debug('Start thread ')
         self.sipRegisterUnauthorized()
+        self.logg=False
+        self.call=False
+        self.t=time.time()
+        self.ba=bytearray()
+        for x in range(0,160):
+                self.ba.append(uPySip.aLaw.linear2alaw(uPySip.aLaw.getSin(x)))
    
     def loop(self):
         ready_list = self.polling_object.poll()
-        print(ready_list)
-        for fd in ready_list: 
-            if fd[0] == self.sock_read.fileno() or fd[0] == self.sock_read:
-                self.readData(self.port)
+        for fd in ready_list:
+            if fd[1]&select.POLLIN:
+                if fd[0] == self.sock_read.fileno() or fd[0] == self.sock_read :
+                    self.readSIPdata(self.port)
+                elif fd[0] == self.sock.fileno() or fd[0] == self.sock:
+                    self.recive()
+        if self.call:
+            for i in range(1,20):
+                if self.t+0.02-time.time()>0:
+                    time.sleep(self.t+0.02-time.time())
+                self.t=time.time()
+                self.send(self.server_addressS,self.ba)
         return True
 
     def sipOKBy(self,toB,viaB,fromB,cSeqB):
@@ -63,7 +84,7 @@ class SipMachine:
         ret = '{}{}'.format(ret, cSeqB)
         ret = '{}{}'.format(ret, self.getContentLength(0))
         ret = '{}{}'.format(ret,self.RN)
-        self.write(ret.encode())
+        self.writeSIPdata(ret.encode())
 
 
     def sipOKInvite(self,toB,viaB,fromB,cSeqB):
@@ -88,7 +109,7 @@ class SipMachine:
         ret = '{}{}'.format(ret, self.getContentLength(contentLength))
         ret = '{}{}'.format(ret,self.RN)
         ret = '{}{}'.format(ret,conten)     
-        self.write(ret.encode())
+        self.writeSIPdata(ret.encode())
 
 
     def sipRinging(self,toB,viaB,fromB,cSeqB):
@@ -101,7 +122,7 @@ class SipMachine:
         ret = '{}{}'.format(ret, self.getContact(self.telNrA, self.userClient))
         ret = '{}{}'.format(ret, self.getContentLength(0))
         ret = '{}{}'.format(ret,self.RN)
-        self.write(ret.encode())
+        self.writeSIPdata(ret.encode())
 
 
     def sipInvite(self, telNrB, UserAgentB):
@@ -133,7 +154,7 @@ class SipMachine:
         ret = '{}{}'.format(ret, self.getContentLength(contentLength))
         ret = '{}{}'.format(ret,self.RN)
         ret = '{}{}'.format(ret, self.getContent())
-        self.write(ret.encode())
+        self.writeSIPdata(ret.encode())
 
 
     def sipInviteA(self):
@@ -163,7 +184,7 @@ class SipMachine:
         ret = '{}{}'.format(ret, self.getContentLength())
         ret = '{}{}'.format(ret,self.RN)
         ret = '{}{}'.format(ret, self.getContent(contentLength))
-        self.write(ret.encode())
+        self.writeSIPdata(ret.encode())
 
 
     def sipACK(self):
@@ -176,11 +197,11 @@ class SipMachine:
         ret = '{}{}'.format(ret, self.getCSeq(self.cSeq,'ACK'))
         ret = '{}{}'.format(ret, self.getContentLength(0))
         ret = '{}{}'.format(ret,self.RN)
-        self.write(ret.encode())
+        self.writeSIPdata(ret.encode())
         self.sipInviteA()
 
     def sipRegisterUnauthorized(self):
-        ret = '{}'.format('REGISTER sip:{} SIP/2.0{}'.format(self.ProxyServer,self.RN))
+        ret = '{}'.format('REGISTER sip:{} SIP/2.0{}'.format(self.server,self.RN))
         ret = '{}{}'.format(ret, self.getVia(self.userClient,self.port,self.branch))
         ret = '{}{}'.format(ret, self.getMaxForwards())
         ret = '{}{}'.format(ret, self.getTo(self.telNrB,self.UserAgentB,self.tagTo))
@@ -192,11 +213,11 @@ class SipMachine:
         ret = '{}{}'.format(ret, self.getExpires(self.expires))
         ret = '{}{}'.format(ret, self.getContentLength(0))
         ret = '{}{}'.format(ret,self.RN)
-        self.write(ret.encode())
+        self.writeSIPdata(ret.encode())
 
 
     def sipRegisterAuthorized(self):
-        ret = '{}'.format('REGISTER sip:{} SIP/2.0{}'.format(self.ProxyServer,self.RN))
+        ret = '{}'.format('REGISTER sip:{} SIP/2.0{}'.format(self.server,self.RN))
         ret = '{}{}'.format(ret, self.getVia(self.userClient,self.port,self.branch))
         ret = '{}{}'.format(ret, self.getMaxForwards())
         ret = '{}{}'.format(ret, self.getTo(self.telNrB,self.UserAgentB,self.tagTo))
@@ -210,7 +231,7 @@ class SipMachine:
         ret = '{}{}'.format(ret, self.getExpires(self.expires))
         ret = '{}{}'.format(ret, self.getContentLength(0))
         ret = '{}{}'.format(ret,self.RN)
-        self.write(ret.encode())
+        self.writeSIPdata(ret.encode())
 
 
     def getVia(self,userClient,port,branch) -> str:
@@ -254,10 +275,10 @@ class SipMachine:
         self.nonceCount = self.nonceCount+1
         self.cnonce = uPySip.md5.md5('das ist ein Chaos'.encode()).hexdigest()
 
-        response=self.getAuth(self.user,self.realm,self.pwd,self.REGISTER,self.ProxyServer,self.nonce,self.nonceCount,self.cnonce,self.qop)
+        response=self.getAuth(self.user,self.realm,self.pwd,self.REGISTER,self.server,self.nonce,self.nonceCount,self.cnonce,self.qop)
 
         return 'Authorization: Digest username="{}",realm="{}",nonce="{}",opaque="",uri="sip:{}",cnonce="{}",nc={:0>8},algorithm=MD5,qop="auth",response="{}"{}'.format(
-            self.user, self.realm, self.nonce, self.ProxyServer, self.cnonce, self.nonceCount, response,self.RN)
+            self.user, self.realm, self.nonce, self.server, self.cnonce, self.nonceCount, response,self.RN)
 
     def getProxiAuthorization(self) -> str:
         uri='{}@{}'.format(telNrB,self.UserAgentB)
@@ -362,28 +383,85 @@ class SipMachine:
         elif self.CSeqTyp == self.INVITE and self.responseCodes == '100':
             pass
         elif self.CSeqTyp == self.INVITE and self.responseCodes == '200':
-            if (self.pcmA==None):
-                self.pcmA = uPySip.pcmA.PcmA(int(self.pcmuPort), self.ProxyServer,self.userClient)
+                self.call=True
+                self.server_addressS = socket.getaddrinfo(self.server, self.pcmuPort)[0][-1]
         elif self.CSeqTyp == self.INVITE and self.responseCodes == 'INVITE sip:':
                 self.sipRinging(toB,viaB,fromB,cSeqB)
                 self.sipOKInvite(toB,viaB,fromB,cSeqB)
         elif self.CSeqTyp == 'ACK' and self.responseCodes == 'ACK sip:':
-                self.pcmA = uPySip.pcmA.PcmA(int(self.pcmuPort), self.ProxyServer,self.userClient)
+            self.call=True
+            self.server_addressS = socket.getaddrinfo(self.server, self.pcmuPort)[0][-1]
         elif self.CSeqTyp == 'BYE' and self.responseCodes == 'BYE sip:':
-            if self.pcmA:
-                self.pcmA.run=False
-                self.pcmA=None
             self.sipOKBy(toB,viaB,fromB,cSeqB)
+            self.call=False
 
-    def readData(self,port):
+    def readSIPdata(self,port):
         try:
             (data, server )= self.sock_read.recvfrom(1024)
-            self.logger.info("readData form {}:{}{}{}".format(server,self.RN,self.RN,data.decode()))
+            self.logger.info("readSIPdata form {}:{}{}{}".format(server,self.RN,self.RN,data.decode()))
             self.parser(data)
         except OSError as e:
             self.logger.error("exception from sock_read.recvfrom {}".format(e))
 
-    def write(self,message):
-        server_address = socket.getaddrinfo(self.ProxyServer, self.port)[0][-1]
+    def writeSIPdata(self,message):
+        server_address = socket.getaddrinfo(self.server, self.port)[0][-1]
         send = self.sockW.sendto(message, server_address)
-        self.logger.info("WriteData to {} : {}{}{}".format((self.ProxyServer, self.port),self.RN,self.RN,message.decode()))
+        self.logger.info("WriteData to {} : {}{}{}".format((self.server, self.port),self.RN,self.RN,message.decode()))
+
+    def send(self,server_addressS,ba):
+
+        b = bytearray(b'\x80\x08')
+        t = time.time()
+        tt = int(t*50) % 10000
+        b.extend(tt.to_bytes(2, 'big'))
+        tt = int(t*8000-t*8000 % 160) % 1000000000
+        b.extend(tt.to_bytes(4, 'big'))
+        b.extend(self.SSRC)
+        b.extend(ba)
+
+        send = self.sock.sendto(b, server_addressS)
+        if self.logg:
+            print('s {:08b} {:08b} {:08b} {:08b}'.format(
+                bytes(b)[0], bytes(b)[1], bytes(b)[2], bytes(b)[3]), end='')
+            print('  {: >10} '.format(int.from_bytes(
+                bytes(b)[0:4], byteorder='big')), end='')
+            print(' {:08b} {:08b} {:08b} {:08b}'.format(
+                bytes(b)[4], bytes(b)[5], bytes(b)[6], bytes(b)[7]), end='')
+            print('  {: >10} '.format(int.from_bytes(
+                bytes(b)[4:8], byteorder='big')), end='')
+            print(' {:08b} {:08b} {:08b} {:08b}'.format(
+                bytes(b)[8], bytes(b)[9], bytes(b)[10], bytes(b)[11]), end='')
+            print('  {: >10} '.format(int.from_bytes(
+                bytes(b)[8:12], byteorder='big')), end='')
+            print(' {:08b} {:08b} {:08b} {:08b}'.format(
+                bytes(b)[12], bytes(b)[13], bytes(b)[14], bytes(b)[15]), end='')
+            print('  {: >10} '.format(int.from_bytes(
+                bytes(b)[12:16], byteorder='big')))
+
+
+    def recive(self):
+        try:
+            (data, server) = self.sock.recvfrom(180)
+            if self.logg:
+                print('r {:08b} {:08b} {:08b} {:08b}'.format(
+                    data[0], data[1], data[2], data[3]), end='')
+                print('  {: >10} '.format(int.from_bytes(
+                    data[0:4], byteorder='big')), end='')
+                print(' {:08b} {:08b} {:08b} {:08b}'.format(
+                    data[4], data[5], data[6], data[7]), end='')
+                print('  {: >10} '.format(int.from_bytes(
+                    data[4:8], byteorder='big')), end='')
+                print(' {:08b} {:08b} {:08b} {:08b}'.format(
+                    data[8], data[9], data[10], data[11]), end='')
+                print('  {: >10} '.format(int.from_bytes(
+                    data[8:12], byteorder='big')), end='')
+                print(' {:08b} {:08b} {:08b} {:08b}'.format(
+                    data[12], data[13], data[14], data[15]), end='')
+                print('  {: >10} '.format(
+                    int.from_bytes(data[12:16], byteorder='big')))
+#                print(' {:08b} {:08b} {:08b} {:08b}'.format(data[16], data[17], data[18], data[19]),end='')
+#                print('  {: >10} '.format(int.from_bytes(data[16:20], byteorder='big' )))
+
+        except OSError as msg :
+            print("Socket Error: {}".format(msg))
+
