@@ -55,9 +55,16 @@ class SipMachine:
         self.logg=False
         self.call=False
         self.t=time.time()
-        self.ba=bytearray()
-        for x in range(0,160):
-                self.ba.append(uPySip.aLaw.linear2alaw(uPySip.aLaw.getSin(x)))
+    #    path=__file__.replace('sipMachine.py','data.pcmA')
+    #    f=open(path,'wb')
+    #    b=bytearray()
+    #    for d in range(1,50*5*160):
+    #        k=bytes([uPySip.aLaw.linear2alaw( uPySip.aLaw.getSin(d))])
+    #        f.write(k)
+    #    f.close()
+  
+
+ 
    
     def loop(self):
         ready_list = self.polling_object.poll()
@@ -68,11 +75,17 @@ class SipMachine:
                 elif fd[0] == self.sock.fileno() or fd[0] == self.sock:
                     self.recive()
         if self.call:
-            for i in range(1,20):
-                if self.t+0.02-time.time()>0:
-                    time.sleep(self.t+0.02-time.time())
-                self.t=time.time()
-                self.send(self.server_addressS,self.ba)
+            path=__file__.replace('sipMachine.py','data.pcmA')
+            f=open(path,'rb')
+            b=f.read(160)
+            t=time.time()
+            while len(b)==160:
+                    self.send(self.server_addressS,b)
+                    b=f.read(160)
+            f.close()
+            self.call=False
+
+
         return True
 
     def sipOKBy(self,toB,viaB,fromB,cSeqB):
