@@ -2,7 +2,7 @@
 import _thread
 import uPySip.md5
 import uPySip.tools
-import time
+import utime
 import socket
 import select
 import uPySip.aLaw
@@ -54,7 +54,7 @@ class SipMachine:
         self.sipRegisterUnauthorized()
         self.logg=False
         self.call=False
-        self.t=time.time()
+
     #    path=__file__.replace('sipMachine.py','data.pcmA')
     #    f=open(path,'wb')
     #    b=bytearray()
@@ -75,11 +75,13 @@ class SipMachine:
                 elif fd[0] == self.sock.fileno() or fd[0] == self.sock:
                     self.recive()
         if self.call:
-            path=__file__.replace('sipMachine.py','data.pcmA')
+            path='/sd/data.pcmA'
             f=open(path,'rb')
             b=f.read(160)
-            t=time.time()
+            t=utime.ticks_ms()
             while len(b)==160:
+                if utime.ticks_ms()-t>=20:
+                    t=utime.ticks_ms()
                     self.send(self.server_addressS,b)
                     b=f.read(160)
             f.close()
@@ -158,7 +160,7 @@ class SipMachine:
         ret = '{}'.format(self.getInvite())
         ret = '{}{}'.format(ret, self.getVia(self.userClient,self.port,self.branch))
         ret = '{}{}'.format(ret, self.getMaxForwards())
-        ret = '{}{}'.format(ret, self.getFrom(self.telNrA,self.UserAgentA,selftagFrom))
+        ret = '{}{}'.format(ret, self.getFrom(self.telNrA,self.UserAgentA,self.tagFrom))
         ret = '{}{}'.format(ret, self.getTo(self.telNrB,self.UserAgentB,self.tagTo))
         ret = '{}{}'.format(ret, self.getCallID(self.callId, self.UserAgentA))
         ret = '{}{}'.format(ret, self.getCSeq(self.cSeq,self.INVITE))
@@ -424,10 +426,10 @@ class SipMachine:
     def send(self,server_addressS,ba):
 
         b = bytearray(b'\x80\x08')
-        t = time.time()
-        tt = int(t*50) % 10000
+        t = utime.ticks_ms()
+        tt = int(t/20) % 10000
         b.extend(tt.to_bytes(2, 'big'))
-        tt = int(t*8000-t*8000 % 160) % 1000000000
+        tt = int(t*8-t*8 % 160) % 1000000000
         b.extend(tt.to_bytes(4, 'big'))
         b.extend(self.SSRC)
         b.extend(ba)
