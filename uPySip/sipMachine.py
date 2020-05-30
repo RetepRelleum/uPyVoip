@@ -6,14 +6,32 @@ import utime
 import socket
 import select
 import uPySip.aLaw
+class B:
+    toB=None
+    viaB=None
+    fromB=None
+    cSeqB=None
+    callIdB=None
+    sdp_o=None
 
 
 class SipMachine:
-    RN='\r\n'
-    INVITE='INVITE'
-    REGISTER='REGISTER'
-    def __init__(self, user='', pwd='', telNrA=225, UserAgentA="b2b.domain", userClient="192.168.1.130", server='192.168.1.1', port=5060):
+    REGISTER=0
+    IDLE=1
+    RINGING=2
+    CALLING=3
+    TRYING=4
+    CALL_ACCEPT=5
+    ON_CALL=6
+    __b=B()
+    
+    __RN = '\r\n'
+    __INVITE = 'INVITE'
+    __REGISTER = 'REGISTER'
+    __status=REGISTER
 
+    def __init__(self, user='', pwd='', telNrA=225, UserAgentA="b2b.domain", userClient="192.168.1.130", server='192.168.1.1', port=5060):
+        self.logger = uPySip.tools.getLogger(__name__)
         self.user = user
         self.pwd = pwd
         self.telNrA = telNrA
@@ -22,9 +40,8 @@ class SipMachine:
         self.UserAgentB = UserAgentA
         self.userClient = userClient
         self.server = server
-        self.logger = uPySip.tools.getLogger(__name__)
+
         self.port = port
-  
 
         self.cSeq = 1
         self.branch = 'z9hG4bK-{}'.format(uPySip.tools.randomChr(30))
@@ -34,26 +51,24 @@ class SipMachine:
         self.expires = 3600
         self.sockW = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock_read = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        server_address = socket.getaddrinfo('0.0.0.0',port)[0][-1]
+        server_address = socket.getaddrinfo('0.0.0.0', port)[0][-1]
         self.sock_read.bind(server_address)
-
-
-        self.server_addressR = socket.getaddrinfo(self.userClient, 17000)[0][-1]       
+        self.server_addressR = socket.getaddrinfo(
+            self.userClient, 17000)[0][-1]
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(self.server_addressR)
 
         self.SSRC = uPySip.tools.randomChr(4).encode()
-
-        self.nonceCount = 0
 
         self.polling_object = select.poll()
         self.polling_object.register(self.sock_read)
         self.polling_object.register(self.sock)
 
         self.logger.debug('Start thread ')
-        self.sipRegisterUnauthorized()
-        self.logg=False
-        self.call=False
+        self.__sipRegister(self.server, self.port, self.branch, self.telNrB, self.UserAgentB, self.tagTo, self.telNrA,
+                         self.UserAgentA, self.tagFrom, self.callId, self.cSeq, self.__REGISTER, self.userClient, self.expires)
+        self.logg = False
+        self.call = False
 
     #    path=__file__.replace('sipMachine.py','data.pcmA')
     #    f=open(path,'wb')
@@ -62,250 +77,218 @@ class SipMachine:
     #        k=bytes([uPySip.aLaw.linear2alaw( uPySip.aLaw.getSin(d))])
     #        f.write(k)
     #    f.close()
-  
 
- 
-   
     def loop(self):
         ready_list = self.polling_object.poll()
         for fd in ready_list:
-            if fd[1]&select.POLLIN:
-                if fd[0] == self.sock_read.fileno() or fd[0] == self.sock_read :
-                    self.readSIPdata(self.port)
+            if fd[1] & select.POLLIN:
+                if fd[0] == self.sock_read.fileno() or fd[0] == self.sock_read:
+                    self.__readSIPdata(self.port)
                 elif fd[0] == self.sock.fileno() or fd[0] == self.sock:
-                    self.recive()
+                    self.__recive()
         if self.call:
-            path='/sd/data.pcmA'
-            f=open(path,'rb')
-            b=f.read(160)
-            t=utime.ticks_ms()
-            while len(b)==160:
-                if utime.ticks_ms()-t>=20:
-                    t=utime.ticks_ms()
-                    self.send(self.server_addressS,b)
-                    b=f.read(160)
+            path = '/sd/data.pcmA'
+            f = open(path, 'rb')
+            b = f.read(160)
+            t = utime.ticks_ms()
+            while len(b) == 160:
+                if utime.ticks_ms()-t >= 20:
+                    t = utime.ticks_ms()
+                    self.__send(self.server_addressS, b)
+                    b = f.read(160)
             f.close()
-            self.call=False
+            self.call = False
+        return self.__status
 
+    def __sipOKBy(self, b:B):
+        ret = '{}{}'.format('SIP/2.0 200 OK', self.__RN)
+        ret = '{}{}'.format(ret, b.viaB)
+        ret = '{}{}'.format(ret, b.fromB)
+        ret = '{}{}'.format(ret, b.toB)
+        ret = '{}{}'.format(ret, b.callIdB)
+        ret = '{}{}'.format(ret, b.cSeqB)
+        ret = '{}{}'.format(ret, self.__getContentLength())
+        ret = '{}{}'.format(ret, self.__RN)
+        self.__writeSIPdata(ret.encode())
 
-        return True
-
-    def sipOKBy(self,toB,viaB,fromB,cSeqB):
-        ret = '{}{}'.format('SIP/2.0 200 OK',self.RN)
-        ret = '{}{}'.format(ret, viaB)
-        ret = '{}{}'.format(ret, fromB)
-        ret = '{}{}'.format(ret, toB)
-        ret = '{}{}'.format(ret, self.getCallIDB())
-        ret = '{}{}'.format(ret, cSeqB)
-        ret = '{}{}'.format(ret, self.getContentLength(0))
-        ret = '{}{}'.format(ret,self.RN)
-        self.writeSIPdata(ret.encode())
-
-
-    def sipOKInvite(self,toB,viaB,fromB,cSeqB):
+    def __sipOKInvite(self, b:B, userClient, telNrA):
         conten = ''
-        conten = '{}{}{}'.format(conten, 'v=0',self.RN)
-        conten = '{}{} {} {} IN IP4 {}{}'.format(conten, 'o=-',int(self.sdp_o)+1, int(self.sdp_o)+1,self.userClient,self.RN)
-        conten = '{}{}{}'.format(conten,'s=-',self.RN )
-        conten = '{}{} {}{}'.format(conten,'c=IN IP4 ',self.userClient,self.RN )  
-        conten = '{}{}{}'.format(conten,'t=0 0',self.RN )        
-        conten = '{}{}{}'.format(conten,'m=audio 17000 RTP/AVP 8',self.RN )        
-        conten = '{}{}{}{}'.format(conten,'a=rtpmap:8 PCMA/8000',self.RN,self.RN ) 
-
+        conten = '{}{}{}'.format(conten, 'v=0', self.__RN)
+        conten = '{}{} {} {} IN IP4 {}{}'.format(conten, 'o=-', int(b.sdp_o)+1, int(b.sdp_o)+1, userClient, self.__RN)
+        conten = '{}{}{}'.format(conten, 's=-', self.__RN)
+        conten = '{}{} {}{}'.format(conten, 'c=IN IP4 ', userClient, self.__RN)
+        conten = '{}{}{}'.format(conten, 't=0 0', self.__RN)
+        conten = '{}{}{}'.format(conten, 'm=audio 17000 RTP/AVP 8', self.__RN)
+        conten = '{}{}{}{}'.format(conten, 'a=rtpmap:8 PCMA/8000', self.__RN, self.__RN)
         contentLength = len(conten)
-        ret = '{}{}'.format('SIP/2.0 200 OK',self.RN)
-        ret = '{}{}'.format(ret,viaB)
-        ret = '{}{}'.format(ret, fromB)
-        ret = '{}{}'.format(ret, toB)
-        ret = '{}{}'.format(ret, self.getCallIDB())
-        ret = '{}{}'.format(ret, cSeqB)
-        ret = '{}{}'.format(ret, self.getContact(self.telNrA, self.userClient))
-        ret = '{}{}'.format(ret, self.getContentType())
-        ret = '{}{}'.format(ret, self.getContentLength(contentLength))
-        ret = '{}{}'.format(ret,self.RN)
-        ret = '{}{}'.format(ret,conten)     
-        self.writeSIPdata(ret.encode())
+        ret = '{}{}'.format('SIP/2.0 200 OK', self.__RN)
+        ret = '{}{}'.format(ret, b.viaB)
+        ret = '{}{}'.format(ret, b.fromB)
+        ret = '{}{}'.format(ret, b.toB)
+        ret = '{}{}'.format(ret, b.callIdB)
+        ret = '{}{}'.format(ret, b.cSeqB)
+        ret = '{}{}'.format(ret, self.__getContact(telNrA, userClient))
+        ret = '{}{}'.format(ret, self.__getContentType())
+        ret = '{}{}'.format(ret, self.__getContentLength(contentLength))
+        ret = '{}{}'.format(ret, self.__RN)
+        ret = '{}{}'.format(ret, conten)
+        self.__writeSIPdata(ret.encode())
 
+    def __sipRinging(self,b:B , userClient, telNrA):
+        ret = '{}{}'.format('SIP/2.0 180 Ringing', self.__RN)
+        ret = '{}{}'.format(ret, b.viaB)
+        ret = '{}{}'.format(ret, b.fromB)
+        ret = '{}{}'.format(ret, b.toB)
+        ret = '{}{}'.format(ret, b.callIdB)
+        ret = '{}{}'.format(ret, b.cSeqB)
+        ret = '{}{}'.format(ret, self.__getContact(telNrA, userClient))
+        ret = '{}{}'.format(ret, self.__getContentLength())
+        ret = '{}{}'.format(ret, self.__RN)
+        self.__writeSIPdata(ret.encode())
 
-    def sipRinging(self,toB,viaB,fromB,cSeqB):
-        ret = '{}{}'.format('SIP/2.0 180 Ringing',self.RN)
-        ret = '{}{}'.format(ret, viaB)
-        ret = '{}{}'.format(ret, fromB)
-        ret = '{}{}'.format(ret, toB)
-        ret = '{}{}'.format(ret, self.getCallIDB())
-        ret = '{}{}'.format(ret, cSeqB)
-        ret = '{}{}'.format(ret, self.getContact(self.telNrA, self.userClient))
-        ret = '{}{}'.format(ret, self.getContentLength(0))
-        ret = '{}{}'.format(ret,self.RN)
-        self.writeSIPdata(ret.encode())
+    def invite(self,telNr):
+        self.telNrB=telNr
+        self.__sipInvite(self.telNrB, self.UserAgentB, self.userClient, self.port, self.branch, self.telNrA, self.UserAgentA)
+        self.__status=self.CALLING
 
-
-    def sipInvite(self, telNrB, UserAgentB):
+    def __sipInvite(self, telNrB, UserAgentB, userClient, port, branch, telNrA, UserAgentA):
         conten = ''
-        conten = '{}v=0{}'.format(conten,self.RN)
-        conten = '{}o=- 1454 1454 IN IP4 {}{}'.format(conten, self.userClient,self.RN)
-        conten = '{}s=-{}'.format(conten,self.RN)
-        conten = '{}c=IN IP4 {}{}'.format(conten,self.userClient,self.RN)
-        conten = '{}t=0 0{}'.format(conten,self.RN)
-        conten = '{}m=audio 17000 RTP/AVP 8{}'.format(conten,self.RN)
-        conten = '{}a=rtpmap:0 PCMA/8000{}'.format(conten,self.RN)
-        conten = '{}{}'.format(conten,self.RN)
+        conten = '{}v=0{}'.format(conten, self.__RN)
+        conten = '{}o=- 1454 1454 IN IP4 {}{}'.format(conten, userClient, self.__RN)
+        conten = '{}s=-{}'.format(conten, self.__RN)
+        conten = '{}c=IN IP4 {}{}'.format(conten, userClient, self.__RN)
+        conten = '{}t=0 0{}'.format(conten, self.__RN)
+        conten = '{}m=audio 17000 RTP/AVP 8{}'.format(conten, self.__RN)
+        conten = '{}a=rtpmap:0 PCMA/8000{}'.format(conten, self.__RN)
+        conten = '{}{}'.format(conten, self.__RN)
         contentLength = len(conten)
-
-        self.telNrB = telNrB
-        self.UserAgentB = UserAgentB
         self.cSeq = 1
-        self.tagTo = ''
+        tagTo = ''
         self.callId = uPySip.tools.randomChr(6)
-        ret = '{}'.format(self.getInvite())
-        ret = '{}{}'.format(ret, self.getVia(self.userClient,self.port,self.branch))
-        ret = '{}{}'.format(ret, self.getMaxForwards())
-        ret = '{}{}'.format(ret, self.getFrom(self.telNrA,self.UserAgentA,self.tagFrom))
-        ret = '{}{}'.format(ret, self.getTo(self.telNrB,self.UserAgentB,self.tagTo))
-        ret = '{}{}'.format(ret, self.getCallID(self.callId, self.UserAgentA))
-        ret = '{}{}'.format(ret, self.getCSeq(self.cSeq,self.INVITE))
-        ret = '{}{}'.format(ret, self.getContact(self.telNrA, self.userClient))
-        ret = '{}{}'.format(ret, self.getContentType())
-        ret = '{}{}'.format(ret, self.getContentLength(contentLength))
-        ret = '{}{}'.format(ret,self.RN)
-        ret = '{}{}'.format(ret, self.getContent())
-        self.writeSIPdata(ret.encode())
+        ret = '{}'.format(self.__getInvite(telNrB, UserAgentB))
+        ret = '{}{}'.format(ret, self.__getVia(userClient, port, branch))
+        ret = '{}{}'.format(ret, self.__getMaxForwards())
+        ret = '{}{}'.format(ret, self.__getFrom(telNrA, UserAgentA, self.tagFrom))
+        ret = '{}{}'.format(ret, self.__getTo(telNrB, UserAgentB, tagTo))
+        ret = '{}{}'.format(ret, self.__getCallID(self.callId, UserAgentA))
+        ret = '{}{}'.format(ret, self.__getCSeq(self.cSeq, self.__INVITE))
+        ret = '{}{}'.format(ret, self.__getContact(self.telNrA, self.userClient))
+        ret = '{}{}'.format(ret, self.__getContentType())
+        ret = '{}{}'.format(ret, self.__getContentLength(contentLength))
+        ret = '{}{}'.format(ret, self.__RN)
+        ret = '{}{}'.format(ret, conten)
+        self.__writeSIPdata(ret.encode()
 
-
-    def sipInviteA(self):
+    def __sipInviteA(self):
         conten = ''
-        conten = '{}v=0{}'.format(conten,self.RN)
-        conten = '{}o=- 1454 1454 IN IP4 {}{}'.format(conten, self.userClient,self.RN)
-        conten = '{}s=-{}'.format(conten,self.RN)
-        conten = '{}c=IN IP4 {}{}'.format(conten,self.userClient,self.RN)
-        conten = '{}t=0 0{}'.format(conten,self.RN)
-        conten = '{}m=audio 17000 RTP/AVP 8{}'.format(conten,self.RN)
-        conten = '{}a=rtpmap:0 PCMA/8000{}'.format(conten,self.RN)
-        conten = '{}{}'.format(conten,self.RN)
+        conten = '{}v=0{}'.format(conten, self.__RN)
+        conten = '{}o=- 1454 1454 IN IP4 {}{}'.format(conten, self.userClient, self.__RN)
+        conten = '{}s=-{}'.format(conten, self.__RN)
+        conten = '{}c=IN IP4 {}{}'.format(conten, self.userClient, self.__RN)
+        conten = '{}t=0 0{}'.format(conten, self.__RN)
+        conten = '{}m=audio 17000 RTP/AVP 8{}'.format(conten, self.__RN)
+        conten = '{}a=rtpmap:0 PCMA/8000{}'.format(conten, self.__RN)
+        conten = '{}{}'.format(conten, self.__RN)
         contentLength = len(conten)
         self.cSeq = self.cSeq+1
         self.tagTo = ''
         self.branch = 'z9hG4bK-{}'.format(uPySip.tools.randomChr(30))
-        ret = '{}'.format(self.getInvite())
-        ret = '{}{}'.format(ret, self.getVia(self.userClient,self.port,self.branch))
-        ret = '{}{}'.format(ret, self.getMaxForwards())
-        ret = '{}{}'.format(ret, self.getFrom(self.telNrA,self.UserAgentA,self.tagFrom))
-        ret = '{}{}'.format(ret, self.getTo(self.telNrB,self.UserAgentB,self.tagTo))
-        ret = '{}{}'.format(ret, self.getCallID(self.callId, self.UserAgentA))
-        ret = '{}{}'.format(ret, self.getCSeq(self.cSeq,self.INVITE))
-        ret = '{}{}'.format(ret, self.getProxiAuthorization())
-        ret = '{}{}'.format(ret, self.getContact(self.telNrA, self.userClient))
-        ret = '{}{}'.format(ret, self.getContentType())
-        ret = '{}{}'.format(ret, self.getContentLength())
-        ret = '{}{}'.format(ret,self.RN)
-        ret = '{}{}'.format(ret, self.getContent(contentLength))
-        self.writeSIPdata(ret.encode())
+        ret = '{}'.format(self.__getInvite(self.telNrB, self.UserAgentB))
+        ret = '{}{}'.format(ret, self.__getVia(self.userClient, self.port, self.branch))
+        ret = '{}{}'.format(ret, self.__getMaxForwards())
+        ret = '{}{}'.format(ret, self.__getFrom(self.telNrA, self.UserAgentA, self.tagFrom))
+        ret = '{}{}'.format(ret, self.__getTo(self.telNrB, self.UserAgentB, self.tagTo))
+        ret = '{}{}'.format(ret, self.__getCallID(self.callId, self.UserAgentA))
+        ret = '{}{}'.format(ret, self.__getCSeq(self.cSeq, self.__INVITE))
+        ret = '{}{}'.format(ret, self.__getAuthorization(self.user, self.realm, self.pwd, self.__INVITE, self.nonce, self.qop,  self.UserAgentB,self.telNrB))
+        ret = '{}{}'.format(ret, self.__getContact(self.telNrA, self.userClient))
+        ret = '{}{}'.format(ret, self.__getContentType())
+        ret = '{}{}'.format(ret, self.__getContentLength())
+        ret = '{}{}'.format(ret, self.__RN)
+        ret = '{}{}'.format(ret, conten)
+        self.__writeSIPdata(ret.encode())
+        a=5
 
+    def __sipACK(self):
+        ret = '{}'.format(self.__getACK(self.telNrB, self.UserAgentB, self.port))
+        ret = '{}{}'.format(ret, self.__getVia(self.userClient, self.port, self.branch))
+        ret = '{}{}'.format(ret, self.__getMaxForwards())
+        ret = '{}{}'.format(ret, self.__getTo(self.telNrB, self.UserAgentB, self.tagTo))
+        ret = '{}{}'.format(ret, self.__getFrom(self.telNrA, self.UserAgentA, self.tagFrom))
+        ret = '{}{}'.format(ret, self.__getCallID(self.callId, self.UserAgentA))
+        ret = '{}{}'.format(ret, self.__getCSeq(self.cSeq, 'ACK'))
+        ret = '{}{}'.format(ret, self.__getContentLength())
+        ret = '{}{}'.format(ret, self.__RN)
+        self.__writeSIPdata(ret.encode())
 
-    def sipACK(self):
-        ret = '{}'.format(self.getACK(self.telNrB, self.UserAgentB, self.port))
-        ret = '{}{}'.format(ret, self.getVia(self.userClient,self.port,self.branch))
-        ret = '{}{}'.format(ret, self.getMaxForwards())
-        ret = '{}{}'.format(ret, self.getTo(self.telNrB,self.UserAgentB,self.tagTo))
-        ret = '{}{}'.format(ret, self.getFrom(self.telNrA,self.UserAgentA,self.tagFrom))
-        ret = '{}{}'.format(ret, self.getCallID(self.callId, self.UserAgentA))
-        ret = '{}{}'.format(ret, self.getCSeq(self.cSeq,'ACK'))
-        ret = '{}{}'.format(ret, self.getContentLength(0))
-        ret = '{}{}'.format(ret,self.RN)
-        self.writeSIPdata(ret.encode())
-        self.sipInviteA()
+    def __sipRegister(self, server, port, branch, telNrB, UserAgentB, tagTo, telNrA, UserAgentA, tagFrom, callId, cSeq, REGISTER, userClient, expires, user=None, realm=None, pwd=None, nonce=None, qop=None):
+        ret = '{}'.format('REGISTER sip:{} SIP/2.0{}'.format(server, self.__RN))
+        ret = '{}{}'.format(ret, self.__getVia(userClient, port, branch))
+        ret = '{}{}'.format(ret, self.__getMaxForwards())
+        ret = '{}{}'.format(ret, self.__getTo(telNrB, UserAgentB, tagTo))
+        ret = '{}{}'.format(ret, self.__getFrom(telNrA, UserAgentA, tagFrom))
+        ret = '{}{}'.format(ret, self.__getCallID(callId, UserAgentA))
+        if user != None:
+            self.cSeq += 1
+        ret = '{}{}'.format(ret, self.__getCSeq(self.cSeq, REGISTER))
+        ret = '{}{}'.format(ret, self.__getContact(telNrA, userClient))
+        ret = '{}{}'.format(ret, self.__getAllow())
+        if user != None:
+            ret = '{}{}'.format(ret, self.__getAuthorization(
+                user, realm, pwd, REGISTER, nonce, qop, server))
+        ret = '{}{}'.format(ret, self.__getExpires(expires))
+        ret = '{}{}'.format(ret, self.__getContentLength())
+        ret = '{}{}'.format(ret, self.__RN)
+        self.__writeSIPdata(ret.encode())
 
-    def sipRegisterUnauthorized(self):
-        ret = '{}'.format('REGISTER sip:{} SIP/2.0{}'.format(self.server,self.RN))
-        ret = '{}{}'.format(ret, self.getVia(self.userClient,self.port,self.branch))
-        ret = '{}{}'.format(ret, self.getMaxForwards())
-        ret = '{}{}'.format(ret, self.getTo(self.telNrB,self.UserAgentB,self.tagTo))
-        ret = '{}{}'.format(ret, self.getFrom(self.telNrA,self.UserAgentA,self.tagFrom))
-        ret = '{}{}'.format(ret, self.getCallID(self.callId, self.UserAgentA))
-        ret = '{}{}'.format(ret, self.getCSeq(self.cSeq,self.REGISTER))
-        ret = '{}{}'.format(ret, self.getContact(self.telNrA, self.userClient))
-        ret = '{}{}'.format(ret, self.getAllow())
-        ret = '{}{}'.format(ret, self.getExpires(self.expires))
-        ret = '{}{}'.format(ret, self.getContentLength(0))
-        ret = '{}{}'.format(ret,self.RN)
-        self.writeSIPdata(ret.encode())
+    def __getVia(self, userClient, port, branch) -> str:
+        return 'Via: SIP/2.0/UDP {}:{};branch={}{}'.format(userClient, port, branch, self.__RN)
 
+    def __getMaxForwards(self) -> str:
+        return 'Max-Forwards: 70{}'.format(self.__RN)
 
-    def sipRegisterAuthorized(self):
-        ret = '{}'.format('REGISTER sip:{} SIP/2.0{}'.format(self.server,self.RN))
-        ret = '{}{}'.format(ret, self.getVia(self.userClient,self.port,self.branch))
-        ret = '{}{}'.format(ret, self.getMaxForwards())
-        ret = '{}{}'.format(ret, self.getTo(self.telNrB,self.UserAgentB,self.tagTo))
-        ret = '{}{}'.format(ret, self.getFrom(self.telNrA,self.UserAgentA,self.tagFrom))
-        ret = '{}{}'.format(ret, self.getCallID(self.callId, self.UserAgentA))
-        self.cSeq = self.cSeq+1
-        ret = '{}{}'.format(ret, self.getCSeq(self.cSeq,self.REGISTER))
-        ret = '{}{}'.format(ret, self.getContact(self.telNrA, self.userClient))
-        ret = '{}{}'.format(ret, self.getAllow())
-        ret = '{}{}'.format(ret, self.getAuthorization())
-        ret = '{}{}'.format(ret, self.getExpires(self.expires))
-        ret = '{}{}'.format(ret, self.getContentLength(0))
-        ret = '{}{}'.format(ret,self.RN)
-        self.writeSIPdata(ret.encode())
-
-
-    def getVia(self,userClient,port,branch) -> str:
-        return 'Via: SIP/2.0/UDP {}:{};branch={}{}'.format(userClient, port, branch,self.RN)
-
-    def getMaxForwards(self) -> str:
-        return 'Max-Forwards: 70{}'.format(self.RN)
-
-    def getTo(self,telNrB,UserAgentB,tagTo) -> str:
-        if len(self.tagTo) > 0:
-            return 'To: <sip:{}@{}>;tag={}{}'.format(telNrB, UserAgentB, tagTo,self.RN)
+    def __getTo(self, telNrB, UserAgentB, tagTo) -> str:
+        if len(tagTo) > 0:
+            return 'To: <sip:{}@{}>;tag={}{}'.format(telNrB, UserAgentB, tagTo, self.__RN)
         else:
-            return 'To: <sip:{}@{}>{}'.format(telNrB, UserAgentB,self.RN)
+            return 'To: <sip:{}@{}>{}'.format(telNrB, UserAgentB, self.__RN)
 
-    def getFrom(self,telNrA,UserAgentA,tagFrom) -> str:
-        return 'From: <sip:{}@{}>;tag={}{}'.format(telNrA, UserAgentA, tagFrom,self.RN)
+    def __getFrom(self, telNrA, UserAgentA, tagFrom) -> str:
+        return 'From: <sip:{}@{}>;tag={}{}'.format(telNrA, UserAgentA, tagFrom, self.__RN)
 
-    def getCallID(self,callId,UserAgentA) -> str:
-        return 'Call-ID: {}@{}{}'.format(callId, UserAgentA,self.RN)
+    def __getCallID(self, callId, UserAgentA) -> str:
+        return 'Call-ID: {}@{}{}'.format(callId, UserAgentA, self.__RN)
 
-    def getCallIDB(self) -> str:
-        return self.callIdB
+    def __getCSeq(self, cSeq, typ) -> str:
+        return 'CSeq: {} {}{}'.format(cSeq, typ, self.__RN)
 
-    def getCSeq(self,cSeq,typ) -> str:
-        return 'CSeq: {} {}{}'.format(cSeq, typ,self.RN)
+    def __getContact(self, telNrA, userClient) -> str:
+        return 'Contact: <sip:{}@{}>{}'.format(telNrA, userClient, self.__RN)
 
+    def __getExpires(self, expires) -> str:
+        return 'Expires: {}{}'.format(expires, self.__RN)
 
-    def getContact(self,telNrA, userClient) -> str:
-        return 'Contact: <sip:{}@{}>{}'.format(telNrA, userClient,self.RN)
+    def __getContentLength(self, contentLength=0) -> str:
+        return 'Content-Length: {}{}'.format(contentLength, self.__RN)
 
-    def getExpires(self,expires) -> str:
-        return 'Expires: {}{}'.format(expires,self.RN)
+    def __getACK(self, telNrB, UserAgentB, port) -> str:
+        return 'ACK sip:{}@{}:{} SIP/2.0{}'.format(telNrB, UserAgentB, port, self.__RN)
 
-    def getContentLength(self,contentLength) -> str:
-        return 'Content-Length: {}{}'.format(contentLength,self.RN)
-
-    def getACK(self,telNrB, UserAgentB, port) -> str:
-        return 'ACK sip:{}@{}:{} SIP/2.0{}'.format(telNrB, UserAgentB, port,self.RN)
-
-    def getAuthorization(self) -> str:
-        self.nonceCount = self.nonceCount+1
-        self.cnonce = uPySip.md5.md5('das ist ein Chaos'.encode()).hexdigest()
-
-        response=self.getAuth(self.user,self.realm,self.pwd,self.REGISTER,self.server,self.nonce,self.nonceCount,self.cnonce,self.qop)
-
+    def __getAuthorization(self, user, realm, pwd, INVITE, nonce, qop, server, telNrB=None) -> str:
+        nonceCount = 1
+        cnonce = uPySip.md5.md5('das ist ein Chaos'.encode()).hexdigest()
+        if telNrB == None:
+            uri = server
+        else:
+            uri = '{}@{}'.format(telNrB, server)
+        response = self.__getAuth(user, realm, pwd, INVITE,uri, nonce, nonceCount, cnonce, qop)
         return 'Authorization: Digest username="{}",realm="{}",nonce="{}",opaque="",uri="sip:{}",cnonce="{}",nc={:0>8},algorithm=MD5,qop="auth",response="{}"{}'.format(
-            self.user, self.realm, self.nonce, self.server, self.cnonce, self.nonceCount, response,self.RN)
+            user, realm, nonce, uri, cnonce, nonceCount, response, self.__RN)
 
-    def getProxiAuthorization(self) -> str:
-        uri='{}@{}'.format(telNrB,self.UserAgentB)
-        response=self.getAuth(self.user,self.realm,self.pwd,self.INVITE,uri,self.nonce,self.nonceCount,self.cnonce,self.qop)
-
-        return 'Authorization: Digest username="{}",realm="{}",nonce="{}",opaque="",uri="sip:{}@{}",cnonce="{}",nc={:0>8},algorithm=MD5,qop="auth",response="{}"{}'.format(
-            self.user, self.realm, self.nonce, self.telNrB,self.UserAgentB, self.cnonce, self.nonceCount, response,self.RN)
-
-    def getAuth(self,user,realm,pwd,typ,uri,nonce,nonceCount,cnonce,qop):
+    def __getAuth(self, user, realm, pwd, typ, uri, nonce, nonceCount, cnonce, qop):
         a1 = '{}:{}:{}'.format(user, realm, pwd)
         ha1 = uPySip.md5.md5(a1.encode()).hexdigest()
-        a2 = '{}:sip:{}'.format( typ, uri)
+        a2 = '{}:sip:{}'.format(typ, uri)
         ha2 = uPySip.md5.md5(a2.encode()).hexdigest()
         a3 = '{}:{}:{:0>8}:{}:{}:{}'.format(ha1, nonce, nonceCount, cnonce, qop, ha2)
         response = uPySip.md5.md5(a3.encode()).hexdigest()
@@ -315,23 +298,21 @@ class SipMachine:
         self.logger.info("a2 :{} ".format(a2))
         self.logger.info("ha2 :{} ".format(ha2))
         self.logger.info("a3 {} ".format(a3))
-        self.logger.info("response :{} {}".format(response,self.RN))
+        self.logger.info("response :{} {}".format(response, self.__RN))
         return response
 
+    def __getAllow(self) -> str:
+        return 'Allow: INVITE,ACK,OPTIONS,BYE,CANCEL,SUBSCRIBE,NOTIFY,REFER,MESSAGE,INFO,PING{}'.format(self.__RN)
 
-    def getAllow(self) -> str:
-        return 'Allow: INVITE,ACK,OPTIONS,BYE,CANCEL,SUBSCRIBE,NOTIFY,REFER,MESSAGE,INFO,PING{}'.format(self.RN)
+    def __getInvite(self, telNrB, UserAgentB) -> str:
+        return 'INVITE sip:{}@{} SIP/2.0{}'.format(telNrB, UserAgentB, self.__RN)
 
-    def getInvite(self) -> str:
-        return 'INVITE sip:{}@{} SIP/2.0{}'.format(self.telNrB, self.UserAgentB,self.RN)
+    def __getContentType(self) -> str:
+        return 'Content-Type: application/sdp{}'.format(self.__RN)
 
-    def getContentType(self) -> str:
-        return 'Content-Type: application/sdp{}'.format(self.RN)
-
-
-    def parser(self, message):
+    def __parser(self, message):
         viaB = ''
-        message = message.decode().split(self.RN)
+        message = message.decode().split(self.__RN)
         for messageStr in message:
             if messageStr.find('Authenticate') >= 0:
                 authenticateArray = messageStr.split(',')
@@ -374,56 +355,71 @@ class SipMachine:
                 self.responseCodes = 'INVITE sip:'
             if messageStr.find('ACK sip:') >= 0:
                 self.responseCodes = 'ACK sip:'
+            if messageStr.find('CANCEL sip:') >= 0:
+                self.responseCodes = 'CANCEL sip:'
             if messageStr.find('Via:') >= 0:
-                viaB = '{}{}{}'.format(viaB, messageStr, self.RN)
+                viaB = '{}{}{}'.format(viaB, messageStr, self.__RN)
             if messageStr.find('From:') >= 0:
-                fromB = '{}{}'.format(messageStr,self.RN)
+                self.__b.fromB = '{}{}'.format(messageStr, self.__RN)
             if messageStr.find('To:') >= 0:
-                toB = '{}{}'.format(messageStr,self.RN)
+                self.__b.toB = '{}{}'.format(messageStr, self.__RN)
             if messageStr.find('Call-ID:') >= 0:
-                self.callIdB = '{}{}'.format(messageStr,self.RN)
+                self.__b.callIdB = '{}{}'.format(messageStr, self.__RN)
             if messageStr.find('CSeq:') >= 0:
-                cSeqB = '{}{}'.format(messageStr,self.RN)
+                self.__b.cSeqB = '{}{}'.format(messageStr, self.__RN)
             if messageStr.find('o=') >= 0:
-                self.sdp_o = messageStr.split(' ')[1]
+                self.__b.sdp_o = messageStr.split(' ')[1]
             if messageStr.find('m=') >= 0:
                 self.pcmuPort = messageStr.split(' ')[1]
-        message=None
-        if self.CSeqTyp == self.REGISTER and self.responseCodes == '401':
-            self.sipRegisterAuthorized()
-        elif self.CSeqTyp == self.REGISTER and self.responseCodes == '200':
+        if viaB!='':
+            self.__b.viaB=viaB
+        message = None
+        if self.CSeqTyp == self.__REGISTER and self.responseCodes == '401':
+            self.__sipRegister(self.server, self.port, self.branch, self.telNrB, self.UserAgentB, self.tagTo, self.telNrA, self.UserAgentA, self.tagFrom,
+                             self.callId, self.cSeq, self.__REGISTER, self.userClient, self.expires, self.user, self.realm, self.pwd, self.nonce, self.qop)
+        elif self.CSeqTyp == self.__REGISTER and self.responseCodes == '200':
+            self.__status=self.IDLE
+        elif self.CSeqTyp == self.__INVITE and self.responseCodes == '407':
+            self.__sipACK()
+            self.__sipInviteA()
+        elif self.CSeqTyp == self.__INVITE and self.responseCodes == '100':
             pass
-        elif self.CSeqTyp == self.INVITE and self.responseCodes == '407':
-            self.sipACK()
-        elif self.CSeqTyp == self.INVITE and self.responseCodes == '100':
-            pass
-        elif self.CSeqTyp == self.INVITE and self.responseCodes == '200':
-                self.call=True
-                self.server_addressS = socket.getaddrinfo(self.server, self.pcmuPort)[0][-1]
-        elif self.CSeqTyp == self.INVITE and self.responseCodes == 'INVITE sip:':
-                self.sipRinging(toB,viaB,fromB,cSeqB)
-                self.sipOKInvite(toB,viaB,fromB,cSeqB)
+        elif self.CSeqTyp == self.__INVITE and self.responseCodes == '200':
+            self.call = True
+            self.server_addressS = socket.getaddrinfo(self.server, self.pcmuPort)[0][-1]
+            self.__sipACK()
+            self.__status=self.ON_CALL
+        elif self.CSeqTyp == self.__INVITE and self.responseCodes == 'INVITE sip:':
+            self.__sipRinging(self.__b,self.userClient, self.telNrA)
+            self.__status=self.RINGING
         elif self.CSeqTyp == 'ACK' and self.responseCodes == 'ACK sip:':
-            self.call=True
+            self.call = True
             self.server_addressS = socket.getaddrinfo(self.server, self.pcmuPort)[0][-1]
         elif self.CSeqTyp == 'BYE' and self.responseCodes == 'BYE sip:':
-            self.sipOKBy(toB,viaB,fromB,cSeqB)
-            self.call=False
+            self.__sipOKBy(self.__b)
+            self.call = False
+            self.__status=self.IDLE
+        elif self.CSeqTyp == 'CANCEL' and self.responseCodes == 'CANCEL sip:':
+            self.__sipOKBy(self.__b)
+            self.call = False
+            self.__status=self.IDLE
 
-    def readSIPdata(self,port):
+    def __readSIPdata(self, port):
         try:
-            (data, server )= self.sock_read.recvfrom(1024)
-            self.logger.info("readSIPdata form {}:{}{}{}".format(server,self.RN,self.RN,data.decode()))
-            self.parser(data)
+            (data, server) = self.sock_read.recvfrom(1024)
+            self.logger.info("__readSIPdata form {}:{}{}{}".format(
+                server, self.__RN, self.__RN, data.decode()))
+            self.__parser(data)
         except OSError as e:
             self.logger.error("exception from sock_read.recvfrom {}".format(e))
 
-    def writeSIPdata(self,message):
+    def __writeSIPdata(self, message):
         server_address = socket.getaddrinfo(self.server, self.port)[0][-1]
-        send = self.sockW.sendto(message, server_address)
-        self.logger.info("WriteData to {} : {}{}{}".format((self.server, self.port),self.RN,self.RN,message.decode()))
+        __send = self.sockW.sendto(message, server_address)
+        self.logger.info("WriteData to {} : {}{}{}".format(
+            (self.server, self.port), self.__RN, self.__RN, message.decode()))
 
-    def send(self,server_addressS,ba):
+    def __send(self, server_addressS, ba):
 
         b = bytearray(b'\x80\x08')
         t = utime.ticks_ms()
@@ -434,7 +430,7 @@ class SipMachine:
         b.extend(self.SSRC)
         b.extend(ba)
 
-        send = self.sock.sendto(b, server_addressS)
+        __send = self.sock.sendto(b, server_addressS)
         if self.logg:
             print('s {:08b} {:08b} {:08b} {:08b}'.format(
                 bytes(b)[0], bytes(b)[1], bytes(b)[2], bytes(b)[3]), end='')
@@ -453,8 +449,7 @@ class SipMachine:
             print('  {: >10} '.format(int.from_bytes(
                 bytes(b)[12:16], byteorder='big')))
 
-
-    def recive(self):
+    def __recive(self):
         try:
             (data, server) = self.sock.recvfrom(180)
             if self.logg:
@@ -477,6 +472,12 @@ class SipMachine:
 #                print(' {:08b} {:08b} {:08b} {:08b}'.format(data[16], data[17], data[18], data[19]),end='')
 #                print('  {: >10} '.format(int.from_bytes(data[16:20], byteorder='big' )))
 
-        except OSError as msg :
+        except OSError as msg:
             print("Socket Error: {}".format(msg))
 
+    def acceptCall(self):
+        self.__sipOKInvite(self.__b, self.userClient, self.telNrA)
+        self.__status=self.CALL_ACCEPT
+
+    def getTelNrB(self):
+        return   self.__b.fromB.split('sip:')[1].split('@')[0]
