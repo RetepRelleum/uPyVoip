@@ -1,7 +1,9 @@
 # uPyVoip
-Voip for Micropython ESP32
+Voip for Micropython ESP32 and Python 3
 
 
 ESP32
-|--uSip.py
-||--uPySip
+|
+#lib
+|   '+--uPySip
+|        

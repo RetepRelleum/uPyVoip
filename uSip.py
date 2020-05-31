@@ -20,7 +20,7 @@ else:
     telId=telid2
     uPySip.tools.basicConfig(level=uPySip.tools.WARNING)
 
-sipMachine=uPySip.sipMachine.SipMachine(user='relleum', pwd='jutkk7x1',telNrA=telId,UserAgentA="b2b.domain",userClient=client,server=server)
+sipMachine=uPySip.sipMachine.SipMachine(user='relleum', pwd='jutkk7x1',telNrA=telId,UserAgentA="b2b.domain",userClient=client,proxyServer=server,proxyRegistrar=server)
 
 
 loop=True
