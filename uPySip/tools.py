@@ -112,3 +112,4 @@ def randomChr(size):
         except:
             pass
     return ret
+

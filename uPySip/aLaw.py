@@ -38,9 +38,13 @@ def linear2alaw(pcm_val):
 	        aval |= (pcm_val >> seg) & QUANT_MASK
         return (aval ^ mask)
 
-
+def alawArr2linearArry(a_val):
+    ret=[]
+    for a in a_val:
+        ret.append(alaw2linear(a))
+    return ret
+    
 def alaw2linear(a_val):
-
     a_val ^= 0x55
     t = (a_val & QUANT_MASK) << 4
     seg = (a_val & SEG_MASK) >> SEG_SHIFT

@@ -20,12 +20,12 @@ else:
     telId=telid2
     uPySip.tools.basicConfig(level=uPySip.tools.WARNING)
 
-sipMachine=uPySip.sipMachine.SipMachine(user='relleum', pwd='jutkk7x1',telNrA=telId,UserAgentA="b2b.domain",userClient=client,proxyServer=server,proxyRegistrar=server)
+sipMachine=uPySip.sipMachine.SipMachine(user='relleum', pwd='jutkk7x1',telNr=telId,userAgent="b2b.domain",userClient=client,proxyServer=server,proxyRegistrar=server)
 
 
 loop=True
 
-first =True
+first =False
 
 while loop>=0:
     loop=sipMachine.loop()
@@ -37,7 +37,7 @@ while loop>=0:
         #print(loop)
     if sipMachine.IDLE==loop:
         if first:
-            sipMachine.invite('222')
+            sipMachine.invite('225')
             first=False
 
            
