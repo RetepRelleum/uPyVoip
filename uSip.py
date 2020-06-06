@@ -30,14 +30,14 @@ first =False
 while loop>=0:
     loop=sipMachine.loop()
     if loop==sipMachine.RINGING:
-        if sipMachine.getTelNrB()=='222':
+        if int(sipMachine.getTelNrB())<300:
             sipMachine.acceptCall()
     if sipMachine.IDLE!=loop:
         pass
         #print(loop)
     if sipMachine.IDLE==loop:
         if first:
-            sipMachine.invite('225')
+            sipMachine.invite('222')
             first=False
 
            

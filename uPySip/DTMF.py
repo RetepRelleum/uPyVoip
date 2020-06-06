@@ -12,32 +12,18 @@ class DTMF:
         return [even[k] + T[k] for k in range(N//2)] + [even[k] - T[k] for k in range(N//2)]
 
     def getKey(self,x):
+        ret=''
         if len(x)<128:
-            if x[2]==0x1:
-                return '1',600000
-            elif x[2]==0x2:
-                return '2',600000
-            elif x[2]==0x3:
-                return '3',600000
-            elif x[2]==0x4:
-                return '4',600000
-            elif x[2]==0x5:
-                return '5',600000
-            elif x[2]==0x6:
-                return '6',600000
-            elif x[2]==0x7:
-                return '7',600000
-            elif x[2]==0x8:
-                return '8',600000
-            elif x[2]==0x9:
-                return '9',600000
-            else:
-                return '0',600000
+            ret='{}'.format(x[12])
+            if x[12]==10:
+                ret='{}'.format('*')      
+            elif x[12]==11:
+                ret='{}'.format('#')                 
+            return ret,600000
         x=uPySip.aLaw.alawArr2linearArry( x[12:172])
         list=[['1',19,11],['2',21,11],['3',24,11],['4',19,12],['5',21,12],['6',24,12],['7',19,14],['8',21,14],['9',24,14],['*',19,15],['0',21,15],['#',24,15]]
         res=self.__fft(x[0:128])
         max=0
-        ret=''
         for b in list:
             temp=abs(res[b[1]])+abs(res[b[2]])
             if max< temp:
@@ -47,47 +33,18 @@ class DTMF:
     
     def keyPressed(self,key):
         Fs = 8000
-        if key=='1':
-            f1 = 1209
-            f2= 697
-        elif key=='2':
-            f1 = 1336
-            f2= 697
-        elif key=='3':
-            f1 = 1477
-            f2= 697
-        elif key=='4':
-            f1 = 1209
-            f2= 770
-        elif key=='5':
-            f1 = 1336
-            f2= 770
-        elif key=='6':
-            f1 = 1477
-            f2= 770
-        elif key=='7':
-            f1 = 1209
-            f2= 852
-        elif key=='8':
-            f1 = 1336
-            f2= 852
-        elif key=='9':
-            f1 = 1477
-            f2= 852
-        elif key=='*':
-            f1 = 1209
-            f2= 941
-        elif key=='0':
-            f1 = 1336
-            f2= 941
-        elif key=='#':
-            f1 = 1477
-            f2= 941
-        else:
-            return None
+        if key=='*':
+            key=10
+        if key=='0':
+            key=11
+        if key=='#':
+            key==12
+        key=int(key)-1
+        toene=[697,770,852,941,1209,1336,1477]
+        map=[[4,0],[5,0],[6,0],[4,1],[5,1],[6,1],[4,2],[5,2],[6,2],[4,3],[5,3],[6,3]]
         ff=[]
         for x in range(0,160):
-            ff.append(16383* math.sin(2 * cmath.pi * f1 * x / Fs)+16383* math.sin(2 * cmath.pi * f2 * x / Fs))
+            ff.append(16383* math.sin(2 * cmath.pi * toene[map[key][0]] * x / Fs)+16383* math.sin(2 * cmath.pi * toene[map[key][1]]  * x / Fs))
         return ff
 
  

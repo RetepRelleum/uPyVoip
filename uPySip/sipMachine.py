@@ -385,18 +385,18 @@ class SipMachine:
         message = None
         if self.CSeqTyp == self.__REGISTER and self.responseCodes == '401':
             self.__sipRegister(self.__userA, self.__auth)
-
         elif self.CSeqTyp == self.__REGISTER and self.responseCodes == '200':
             self.__status = self.IDLE
         elif self.CSeqTyp == self.__INVITE and self.responseCodes == '407':
             self.__sipACK(self.__userB, self.__userA, self.__auth)
             self.__sipInvite(self.__userB, self.__userA, self.__auth)
+        elif self.CSeqTyp == self.__INVITE and self.responseCodes == '486':
+            self.__sipACK(self.__userB, self.__userA, self.__auth)
         elif self.CSeqTyp == self.__INVITE and self.responseCodes == '100':
             pass
         elif self.CSeqTyp == self.__INVITE and self.responseCodes == '200':
             self.call = True
-            self.server_addressS = socket.getaddrinfo(
-                self.__auth.proxyServer, self.pcmuPort)[0][-1]
+            self.server_addressS = socket.getaddrinfo(self.__auth.proxyServer, self.pcmuPort)[0][-1]
             self.__sipACK(self.__userB, self.__userA, self.__auth)
             self.__status = self.ON_CALL
         elif self.CSeqTyp == self.__INVITE and self.responseCodes == 'INVITE sip:':
@@ -431,7 +431,6 @@ class SipMachine:
             (self.__auth.proxyServer, self.__auth.port), self.__RN, self.__RN, message.decode()))
 
     def __send(self, server_addressS, ba):
-
         b = bytearray(b'\x80\x08')
         t = utime.ticks_ms()
         tt = int(t/20) % 10000
@@ -465,9 +464,7 @@ class SipMachine:
             (data, proxyServer) = self.sock.recvfrom(180)
             a=uPySip.DTMF.DTMF().getKey(data)
             if a[1]>500000:
-                print(a[0] )
-
-
+                print('{} {}'.format(a[0],a[1] ))
             if self.logg:
                 print('r {:08b} {:08b} {:08b} {:08b}'.format(
                     data[0], data[1], data[2], data[3]), end='')
