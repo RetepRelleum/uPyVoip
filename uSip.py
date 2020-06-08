@@ -3,7 +3,7 @@ import uPySip.sipMachine
 import sys
 import time
 
-logger = uPySip.tools.getLogger(__name__)
+
 
 port=5060
 server='192.168.1.1'
@@ -14,7 +14,7 @@ telid2=226
 if sys.platform=='linux':
     client=client1
     telId=telId1
-    uPySip.tools.basicConfig(level=uPySip.tools.DEBUG)
+
 else:
     client=client2
     telId=telid2
@@ -25,7 +25,7 @@ sipMachine=uPySip.sipMachine.SipMachine(user='relleum', pwd='jutkk7x1',telNr=tel
 
 loop=True
 
-first =False
+first =True
 
 while loop>=0:
     loop=sipMachine.loop()
@@ -39,7 +39,3 @@ while loop>=0:
         if first:
             sipMachine.invite('222')
             first=False
-
-           
-
-  

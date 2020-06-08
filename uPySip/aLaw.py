@@ -14,7 +14,6 @@ def search(val, table, size):
 
 
 def linear2alaw(pcm_val):
-
     pcm_val = pcm_val >> 3
 
     if pcm_val >= 0:
