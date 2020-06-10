@@ -3,8 +3,6 @@ import uPySip.sipMachine
 import sys
 import time
 
-
-
 port=5060
 server='192.168.1.1'
 client1='192.168.1.113'
@@ -22,9 +20,7 @@ else:
 
 sipMachine=uPySip.sipMachine.SipMachine(user='relleum', pwd='jutkk7x1',telNr=telId,userAgent="b2b.domain",userClient=client,proxyServer=server,proxyRegistrar=server)
 
-
 loop=True
-
 first =True
 
 while loop>=0:
