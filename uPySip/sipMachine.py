@@ -35,33 +35,37 @@ class Auth:
     types = None
     nonce = None
     qop = None
-    proxyServer = None
-    proxyRegistrar = None
-    port = 5060
-    expires = 3600
 
-    def getUri(self, userB: UserB):
+
+    def __getUri(self, userB: UserB):
         if userB.telNr == None:
-            return self.proxyRegistrar
+            return userB.agent
         else:
             return '{}@{}'.format(userB.telNr, userB.agent)
 
     def __getAuth(self, userB: UserB):
         a1 = '{}:{}:{}'.format(self.user, self.realm, self.pwd)
         ha1 = uPySip.md5.md5(a1.encode()).hexdigest()
-        a2 = '{}:sip:{}'.format(self.types, self.getUri(userB))
+        a2 = '{}:sip:{}'.format(self.types, self.__getUri(userB))
         ha2 = uPySip.md5.md5(a2.encode()).hexdigest()
         a3 = '{}:{}:{:0>8}:{}:{}:{}'.format(
             ha1, self.nonce, self.nonceCount, self.cnonce, self.qop, ha2)
-        response = uPySip.md5.md5(a3.encode()).hexdigest()
-        return response
+        return uPySip.md5.md5(a3.encode()).hexdigest()
 
     def getAuthorization(self, userB: UserB) -> str:
+        """function getAuthorization 
+
+        Args:
+            userB (UserB): UserB with telNr and agent
+
+        Returns:
+            str: Sip Line for Authorization 
+        """
         self.nonceCount = 1
         self.cnonce = uPySip.md5.md5('das ist ein Chaos'.encode()).hexdigest()
         response = self.__getAuth(userB)
         return 'Authorization: Digest username="{}",realm="{}",nonce="{}",opaque="",uri="sip:{}",cnonce="{}",nc={:0>8},algorithm=MD5,qop="auth",response="{}"{}'.format(
-            self.user, self.realm, self.nonce, self.getUri(userB), self.cnonce, self.nonceCount, response, self.__RN)
+            self.user, self.realm, self.nonce, self.__getUri(userB), self.cnonce, self.nonceCount, response, self.__RN)
 
 class SipMachine:
     REGISTER = 0x00
@@ -77,6 +81,7 @@ class SipMachine:
     __RN = '\r\n'
     __INVITE = 'INVITE'
     __REGISTER = 'REGISTER'
+    __BYE='BYE'
     __status = REGISTER
     __key = ''
     __record = False
@@ -89,13 +94,28 @@ class SipMachine:
     __buffer[11] = 0x71
     __sock_SIP = None
     __f_sip = None
+    __proxyServer = None
+    __proxyRegistrar = None
+    __port = 5060
 
-    def __init__(self, user='', pwd='', telNr=225, userAgent="b2b.domain", userClient="192.168.1.130", proxyServer='192.168.1.1', proxyRegistrar='192.168.1.1', port=5060):
+    def __init__(self:str, user:str, pwd:str, telNr:str, userAgent:str, userClient:str, proxyServer:str, proxyRegistrar:str='192.168.1.1', port:str=5060):
+        """Init sipMachine
+
+        Args:
+            user (str): sip User configure in proxyRegistrar 
+            pwd (str): password configured in proxyRegistrar 
+            telNr (str): telephon number configured in proxyRegistrar
+            userAgent (str): b2b user Agent name .
+            userClient (str): ip Adress Client.
+            proxyServer (str): ip Adress proxiServer.
+            proxyRegistrar (str, ): ip Adress proxyRegistrar most proxiServer . 
+            port (str, optional): [description]. Defaults to 5060.
+        """
         self.__auth.user = user
         self.__auth.pwd = pwd
-        self.__auth.proxyServer = proxyServer
-        self.__auth.proxyRegistrar = proxyRegistrar
-        self.__auth.port = port
+        self.__proxyServer = proxyServer
+        self.__proxyRegistrar = proxyRegistrar
+        self.__port = port
         self.__userA.telNr = telNr
         self.__userA.agent = userAgent
         self.__userA.userClient = userClient
@@ -123,7 +143,18 @@ class SipMachine:
     #        f.write(k)
     #    f.close()
 
-    def loop(self):
+    def loop(self)->bytes:
+        """ loop in main
+
+        Returns:
+            byte: [ REGISTER = 0x00
+                    IDLE = 0x01
+                    RINGING = 0x02
+                    CALLING = 0x03
+                    TRYING = 0x0
+                    CALL_ACCEPT = 0x05
+                    ON_CALL = 0x06]
+        """
         ready_list = self.__polling_object.poll()
         for fd in ready_list:
             if fd[1] & select.POLLIN:
@@ -134,9 +165,9 @@ class SipMachine:
                     self.__recive()
                 if fd[0] == self.__sock_sip_r.fileno() or fd[0] == self.__sock_sip_r:
                     if self.__f_sip != None:
-                        self.closeConnection()
+                        self.__closeConnection()
                     (a, b) = self.__sock_sip_r.accept()
-                    self.setConnection(a)
+                    self.__setConnection(a)
         if self.__call:
             gc.collect()
             print('start')
@@ -156,19 +187,75 @@ class SipMachine:
             print('end')
         return self.__status
 
+    def bye(self):
+        self.__setConnection()
+        self.__writeSIPdata('BYE sip:{}@{} SIP/2.0'.format(self.__userA.telNr,self.__userA.userClient, self.__RN))
+        self.__getVia(self.__userA)
+        self.__getMaxForwards()
+        self.__getFrom(self.__userA)
+        self.__getTo(self.__userB)
+        self.__getCallID(self.__userA)
+        self.__getCSeq(self.__userA.cSeq, self.__BYE) 
+        self.__getContentLength()
+        self.__writeSIPdata(self.__RN)       
+
+    def invite(self, telNr:str, userAgent=None):
+        """make a call
+
+        Args:
+            telNr (str): telephon number to call
+            userAgent (str, optional): if None the same as the UserAgent from system. Defaults to None.
+        """
+        self.__setConnection()
+        self.__userB.sdp_o = 25
+        self.__userB.telNr = telNr
+        if userAgent == None:
+            self.__userB.agent = self.__userA.agent
+        else:
+            self.__userB.agent = userAgent
+        self.__userA.callId = uPySip.tools.randomChr(7)
+        self.__userA.tagFrom = uPySip.tools.randomChr(30)
+        self.__userA.cSeq += 1
+        self.__auth.nonce = None
+        self.__sipInvite(self.__userB, self.__userA, self.__auth)
+        self.__status = self.CALLING
+
+    def acceptCall(self):
+        """ Accept Call
+        """
+        self.__sipOK(self.__userB, self.__userA)
+        self.__status = self.CALL_ACCEPT
+
+    def getTelNrB(self)->str:
+        """ get the tel nr of the ringing call
+
+        Returns:
+            str: tel nr
+        """
+        return self.__userB.fromB.split('sip:')[1].split('@')[0]
+
+    def getKeyPressed(self)->str:
+        """ get the pressed key on the phone b
+
+        Returns:
+            str: 0,1,2,3,4,5,6,7,8,9,*,#
+        """
+        key = self.__key
+        self.__key = ''
+        return key
+
     def __sipRegister(self, userA: UserA, auth: Auth = None):
-        self.setConnection()
+        self.__setConnection()
         userB = UserB()
         userB.telNr = None
-        userB.agent = auth.proxyRegistrar
+        userB.agent = self.__proxyRegistrar
         if auth.nonce != None:
             userA.cSeq += 1
             auth.types = self.__REGISTER
         else:
             userA.callId = uPySip.tools.randomChr(7)
-        self.__writeSIPdata(
-            'REGISTER sip:{} SIP/2.0{}'.format(auth.proxyRegistrar, self.__RN))
-        self.__getVia(userA, auth)
+        self.__writeSIPdata('REGISTER sip:{} SIP/2.0{}'.format(self.__proxyRegistrar, self.__RN))
+        self.__getVia(userA)
         self.__getMaxForwards()
         self.__getTo(userA)
         self.__getFrom(userA)
@@ -227,21 +314,6 @@ class SipMachine:
         self.__getContentLength()
         self.__writeSIPdata(self.__RN)
 
-    def invite(self, telNr, userAgent=None):
-        self.setConnection()
-        self.__userB.sdp_o = 25
-        self.__userB.telNr = telNr
-        if userAgent == None:
-            self.__userB.agent = self.__userA.agent
-        else:
-            self.__userB.agent = userAgent
-        self.__userA.callId = uPySip.tools.randomChr(7)
-        self.__userA.tagFrom = uPySip.tools.randomChr(30)
-        self.__userA.cSeq += 1
-        self.__auth.nonce = None
-        self.__sipInvite(self.__userB, self.__userA, self.__auth)
-        self.__status = self.CALLING
-
     def __sipInvite(self, userB: UserB, userA: UserA, auth: Auth = None):
         self.__userB.tagTo = ''
         conten = self.__getConten(userB, userA.userClient)
@@ -250,7 +322,7 @@ class SipMachine:
             userA.cSeq += 1
             auth.types = self.__INVITE
         self.__getInvite(userB)
-        self.__getVia(userA, auth)
+        self.__getVia(userA)
         self.__getMaxForwards()
         self.__getFrom(userA)
         self.__getTo(userB)
@@ -265,8 +337,8 @@ class SipMachine:
         self.__writeSIPdata(conten)
 
     def __sipACK(self, userB: UserB, userA: UserA, auth: Auth):
-        self.__getACK(userB.telNr, userB.agent, auth.port)
-        self.__getVia(userA, auth)
+        self.__getACK(userB.telNr, userB.agent, self.__port)
+        self.__getVia(userA)
         self.__getMaxForwards()
         self.__getTo(userB)
         self.__getFrom(userA)
@@ -275,9 +347,9 @@ class SipMachine:
         self.__getContentLength()
         self.__writeSIPdata(self.__RN)
 
-    def __getVia(self, user, auth) -> str:
+    def __getVia(self, user) -> str:
         self.__writeSIPdata('Via: SIP/2.0/TCP {}:{};branch={}{}'.format(
-            user.userClient, auth.port, user.branch, self.__RN))
+            user.userClient, self.__port, user.branch, self.__RN))
 
     def __getMaxForwards(self) -> str:
         self.__writeSIPdata('Max-Forwards: 70{}'.format(self.__RN))
@@ -390,7 +462,7 @@ class SipMachine:
             self.__sipRegister(self.__userA, self.__auth)
         elif self.CSeqTyp == self.__REGISTER and self.responseCodes == '200':
             self.__status = self.IDLE
-            self.closeConnection()
+            self.__closeConnection()
         elif self.CSeqTyp == self.__INVITE and self.responseCodes == '407':
             self.__sipACK(self.__userB, self.__userA, self.__auth)
             self.__sipInvite(self.__userB, self.__userA, self.__auth)
@@ -400,25 +472,23 @@ class SipMachine:
             pass
         elif self.CSeqTyp == self.__INVITE and self.responseCodes == '200':
             self.__call = True
-            self.server_addressS = socket.getaddrinfo(
-                self.__auth.proxyServer, self.pcmuPort)[0][-1]
+            self.server_addressS = socket.getaddrinfo(self.__proxyServer, self.pcmuPort)[0][-1]
             self.__sipACK(self.__userB, self.__userA, self.__auth)
             self.__status = self.ON_CALL
-            self.closeConnection()
+            self.__closeConnection()
         elif self.CSeqTyp == self.__INVITE and self.responseCodes == 'INVITE sip:':
             self.__userA.tagTo = uPySip.tools.randomChr(30)
             self.__sipRinging(self.__userB, self.__userA)
             self.__status = self.RINGING
         elif self.CSeqTyp == 'ACK' and self.responseCodes == 'ACK sip:':
-            self.server_addressS = socket.getaddrinfo(
-                self.__auth.proxyServer, self.pcmuPort)[0][-1]
+            self.server_addressS = socket.getaddrinfo(self.__proxyServer, self.pcmuPort)[0][-1]
             self.__call = True
-            self.closeConnection()
+            self.__closeConnection()
         elif self.CSeqTyp == 'BYE' and self.responseCodes == 'BYE sip:':
             self.__sipOK(self.__userB)
             self.__call = False
             self.__status = self.IDLE
-            self.closeConnection()
+            self.__closeConnection()
         elif self.CSeqTyp == 'CANCEL' and self.responseCodes == 'CANCEL sip:':
             self.__sipOK(self.__userB)
             self.__call = False
@@ -468,26 +538,10 @@ class SipMachine:
         except OSError as msg:
             print("Socket Error: {}".format(msg))
 
-    def acceptCall(self):
-        self.__sipOK(self.__userB, self.__userA)
-        self.__status = self.CALL_ACCEPT
-
-    def getTelNrB(self):
-        return self.__userB.fromB.split('sip:')[1].split('@')[0]
-
-    def getKeyPressed(self):
-        key = self.__key
-        self.__key = ''
-        return key
-
-    def record(self):
-        self.__record = True
-
-    def setConnection(self, __sock_SIP=None):
+    def __setConnection(self, __sock_SIP=None):
         if self.__sock_SIP == None:
             self.__sock_SIP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.__sock_SIP.connect(socket.getaddrinfo(
-                self.__auth.proxyServer, self.__auth.port)[0][-1])
+            self.__sock_SIP.connect(socket.getaddrinfo(self.__proxyServer, self.__port)[0][-1])
         if __sock_SIP != None:
             self.__sock_SIP = __sock_SIP
         if self.__f_sip == None:
@@ -496,7 +550,7 @@ class SipMachine:
             self.__polling_object.register(self.__f_sip)
         self.__userB.viaB = ''
 
-    def closeConnection(self):
+    def __closeConnection(self):
         print('** off')
         self.__polling_object.unregister(self.__f_sip)
         self.__f_sip.close()

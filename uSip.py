@@ -2,6 +2,7 @@ import uPySip.tools
 import uPySip.sipMachine
 import sys
 import time
+import gc
 
 port=5060
 server='192.168.1.1'
@@ -35,3 +36,8 @@ while loop>=0:
         if first:
             sipMachine.invite('222')
             first=False
+    if sipMachine.ON_CALL==loop:
+        keyPressed=sipMachine.getKeyPressed()
+        if keyPressed!='':
+            print(keyPressed)
+            sipMachine.bye()
