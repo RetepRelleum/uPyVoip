@@ -13,7 +13,6 @@ telid2=226
 if sys.platform=='linux':
     client=client1
     telId=telId1
-
 else:
     client=client2
     telId=telid2
@@ -39,5 +38,7 @@ while loop>=0:
     if sipMachine.ON_CALL==loop:
         keyPressed=sipMachine.getKeyPressed()
         if keyPressed!='':
-            print(keyPressed)
-            sipMachine.bye()
+            if keyPressed=='0':
+                sipMachine.bye()
+            elif keyPressed=='2':
+                sipMachine.play('/sd/data.pcmA')

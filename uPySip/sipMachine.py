@@ -75,6 +75,7 @@ class SipMachine:
     TRYING = 0x0
     CALL_ACCEPT = 0x05
     ON_CALL = 0x06
+    BYE=0x07
     __userB = UserB()
     __userA = UserA()
     __auth = Auth()
@@ -97,6 +98,7 @@ class SipMachine:
     __proxyServer = None
     __proxyRegistrar = None
     __port = 5060
+    __keyTimestamp=utime.ticks_ms()
 
     def __init__(self:str, user:str, pwd:str, telNr:str, userAgent:str, userClient:str, proxyServer:str, proxyRegistrar:str='192.168.1.1', port:str=5060):
         """Init sipMachine
@@ -134,6 +136,7 @@ class SipMachine:
 
         self.__sipRegister(self.__userA, self.__auth)
         self.__call = False
+        self.__path='/sd/data.pcmA'
 
     #    path=__file__.replace('sipMachine.py','data.pcmA')
     #    f=open(path,'wb')
@@ -171,8 +174,7 @@ class SipMachine:
         if self.__call:
             gc.collect()
             print('start')
-            path = '/sd/data.pcmA'
-            f = open(path, 'rb')
+            f = open(self.__path, 'rb')
             v = memoryview(self.__buffer)
             l = f.readinto(v[12:])
             t = utime.ticks_ms()
@@ -187,17 +189,22 @@ class SipMachine:
             print('end')
         return self.__status
 
-    def bye(self):
+    def bye(self,auth=None):
+        self.__userA.cSeq+=1
         self.__setConnection()
-        self.__writeSIPdata('BYE sip:{}@{} SIP/2.0'.format(self.__userA.telNr,self.__userA.userClient, self.__RN))
+        self.__writeSIPdata('BYE sip:{}@{} SIP/2.0{}'.format(self.__userA.telNr,self.__userA.userClient, self.__RN))
         self.__getVia(self.__userA)
         self.__getMaxForwards()
         self.__getFrom(self.__userA)
         self.__getTo(self.__userB)
         self.__getCallID(self.__userA)
         self.__getCSeq(self.__userA.cSeq, self.__BYE) 
+        if auth != None:
+            self.__auth.types=self.__BYE
+            self.__writeSIPdata(self.__auth.getAuthorization(self.__userB))
         self.__getContentLength()
-        self.__writeSIPdata(self.__RN)       
+        self.__writeSIPdata(self.__RN)      
+        self.__status = self.BYE 
 
     def invite(self, telNr:str, userAgent=None):
         """make a call
@@ -243,6 +250,10 @@ class SipMachine:
         key = self.__key
         self.__key = ''
         return key
+    
+    def play(self,path):
+        self.__path=path
+        self.__call=True
 
     def __sipRegister(self, userA: UserA, auth: Auth = None):
         self.__setConnection()
@@ -466,6 +477,9 @@ class SipMachine:
         elif self.CSeqTyp == self.__INVITE and self.responseCodes == '407':
             self.__sipACK(self.__userB, self.__userA, self.__auth)
             self.__sipInvite(self.__userB, self.__userA, self.__auth)
+        elif self.CSeqTyp == self.__BYE and self.responseCodes == '407':
+            self.__sipACK(self.__userB, self.__userA, self.__auth)
+            self.bye(self.__auth)
         elif self.CSeqTyp == self.__INVITE and self.responseCodes == '486':
             self.__sipACK(self.__userB, self.__userA, self.__auth)
         elif self.CSeqTyp == self.__INVITE and self.responseCodes == '100':
@@ -484,8 +498,13 @@ class SipMachine:
             self.server_addressS = socket.getaddrinfo(self.__proxyServer, self.pcmuPort)[0][-1]
             self.__call = True
             self.__closeConnection()
+            self.__status = self.ON_CALL            
         elif self.CSeqTyp == 'BYE' and self.responseCodes == 'BYE sip:':
             self.__sipOK(self.__userB)
+            self.__call = False
+            self.__status = self.IDLE
+            self.__closeConnection()
+        elif self.CSeqTyp == 'BYE' and self.responseCodes == '200':
             self.__call = False
             self.__status = self.IDLE
             self.__closeConnection()
@@ -532,9 +551,10 @@ class SipMachine:
         try:
             (data, proxyServer) = self.__sock.recvfrom(180)
             a = uPySip.DTMF.DTMF().getKey(data)
-            if a[1] > 500000:
-                self.__key = a[0]
-                print(a[0])
+            if a[1] > 500000 :
+                if self.__keyTimestamp!=int.from_bytes(data[4:8],'big'):
+                    self.__key = a[0]
+                    self.__keyTimestamp=int.from_bytes(data[4:8],'big')
         except OSError as msg:
             print("Socket Error: {}".format(msg))
 
