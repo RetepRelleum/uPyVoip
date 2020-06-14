@@ -8,6 +8,7 @@ import select
 import uPySip.aLaw
 import uPySip.DTMF
 import gc
+import sys
 
 class User:
     telNr = None
@@ -171,22 +172,27 @@ class SipMachine:
                         self.__closeConnection()
                     (a, b) = self.__sock_sip_r.accept()
                     self.__setConnection(a)
+        gc.collect()
         if self.__call:
-            gc.collect()
             print('start')
             f = open(self.__path, 'rb')
             v = memoryview(self.__buffer)
             l = f.readinto(v[12:])
             t = utime.ticks_ms()
+            i=0
             while l == 160:
                 if utime.ticks_ms()-t >= 20:
+                    i+=1
                     t = utime.ticks_ms()
                     self.__send(self.server_addressS)
-                    v = memoryview(self.__buffer)
                     l = f.readinto(v[12:])
+                    if i%20==0:  #Bad solution
+                        gc.collect()
             f.close()
             self.__call = False
             print('end')
+        if sys.platform!='linux':
+            print(gc.mem_free())
         return self.__status
 
     def bye(self,auth=None):
@@ -559,6 +565,7 @@ class SipMachine:
             print("Socket Error: {}".format(msg))
 
     def __setConnection(self, __sock_SIP=None):
+        gc.collect()
         if self.__sock_SIP == None:
             self.__sock_SIP = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.__sock_SIP.connect(socket.getaddrinfo(self.__proxyServer, self.__port)[0][-1])
@@ -577,3 +584,4 @@ class SipMachine:
         self.__sock_SIP.close()
         self.__f_sip = None
         self.__sock_SIP = None
+        gc.collect()
