@@ -67,9 +67,7 @@ class md5():
         while len(self.message)%64 != 56:
             self.message.append(0)
         self.message += orig_len_in_bits.to_bytes(8, 'little')
-
         hash_pieces = init_values[:]
-
         for chunk_ofst in range(0, len(self.message), 64):
             a, b, c, d = hash_pieces
             chunk = self.message[chunk_ofst:chunk_ofst+64]
@@ -79,11 +77,9 @@ class md5():
                 to_rotate = a + f + constants[i] + int.from_bytes(chunk[4*g:4*g+4], 'little')
                 new_b = (b + self.left_rotate(to_rotate, rotate_amounts[i])) & 0xFFFFFFFF
                 a, b, c, d = d, new_b, b, c
-
             for i, val in enumerate([a, b, c, d]):
                 hash_pieces[i] += val
                 hash_pieces[i] &= 0xFFFFFFFF
-
         self.msg_digest = sum(x<<(32*i) for i, x in enumerate(hash_pieces))
 
     def digest(self):

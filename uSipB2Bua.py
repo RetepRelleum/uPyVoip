@@ -19,7 +19,7 @@ else:
 
 sipMachine=uPySip.sipMachine.SipMachine(user='relleum', pwd='jutkk7x1',telNr=telId,userAgent="b2b.domain",userClient=client,proxyServer=server,proxyRegistrar=server)
 loop=True
-first =True
+first =False
 
 while loop>=0:
     loop=sipMachine.loop()

@@ -1,4 +1,3 @@
-
 import _thread
 import uPySip.md5
 import uPySip.tools
@@ -9,6 +8,22 @@ import uPySip.aLaw
 import uPySip.DTMF
 import gc
 import sys
+import os
+
+debug=True
+
+def _randomChr(size):
+    ret = ""
+    a = 0
+    while a < size:
+        try:
+            b = os.urandom(10)[5]
+            if (b >= 48 and b < 58) or (b > 64 and b < 91) or (b > 97 and b < 123):
+                ret = '{}{}'.format(ret, chr(b))
+                a = a+1
+        except:
+            pass
+    return ret
 
 class User:
     telNr = None
@@ -16,11 +31,13 @@ class User:
     cSeq = 0
     callId = None
     tagTo = ""
-    tagFrom = uPySip.tools.randomChr(30)
+    tagFrom = _randomChr(30)
+
 
 class UserA(User):
     userClient = None
-    branch = 'z9hG4bK-{}'.format(uPySip.tools.randomChr(30))
+    def __init__(self):
+        self.branch = 'z9hG4bK-{}'.format(_randomChr(30))
 
 class UserB(User):
     toB = None
@@ -36,7 +53,6 @@ class Auth:
     types = None
     nonce = None
     qop = None
-
 
     def __getUri(self, userB: UserB):
         if userB.telNr == None:
@@ -55,7 +71,6 @@ class Auth:
 
     def getAuthorization(self, userB: UserB) -> str:
         """function getAuthorization 
-
         Args:
             userB (UserB): UserB with telNr and agent
 
@@ -174,7 +189,7 @@ class SipMachine:
                     self.__setConnection(a)
         gc.collect()
         if self.__call:
-            print('start')
+            if debug: print('start')
             f = open(self.__path, 'rb')
             v = memoryview(self.__buffer)
             l = f.readinto(v[12:])
@@ -190,12 +205,17 @@ class SipMachine:
                         gc.collect()
             f.close()
             self.__call = False
-            print('end')
+            if debug:print('end')
         if sys.platform!='linux':
-            print(gc.mem_free())
+            if debug:print(gc.mem_free())
         return self.__status
 
     def bye(self,auth=None):
+        """ terminate the call
+
+        Args:
+            auth ([type], optional): [description]. Defaults to None.
+        """
         self.__userA.cSeq+=1
         self.__setConnection()
         self.__writeSIPdata('BYE sip:{}@{} SIP/2.0{}'.format(self.__userA.telNr,self.__userA.userClient, self.__RN))
@@ -258,6 +278,11 @@ class SipMachine:
         return key
     
     def play(self,path):
+        """Ply the pcmAlaw file 
+
+        Args:
+            path (str): path  to the pcmAlaw file 
+        """
         self.__path=path
         self.__call=True
 
@@ -270,7 +295,7 @@ class SipMachine:
             userA.cSeq += 1
             auth.types = self.__REGISTER
         else:
-            userA.callId = uPySip.tools.randomChr(7)
+            userA.callId =_randomChr(7)
         self.__writeSIPdata('REGISTER sip:{} SIP/2.0{}'.format(self.__proxyRegistrar, self.__RN))
         self.__getVia(userA)
         self.__getMaxForwards()
@@ -380,8 +405,7 @@ class SipMachine:
                 user.telNr, user.agent, self.__RN))
 
     def __getFrom(self, userA: UserA) -> str:
-        self.__writeSIPdata('From: <sip:{}@{}>;tag={}{}'.format(
-            userA.telNr, userA.agent, userA.tagFrom, self.__RN))
+        self.__writeSIPdata('From: <sip:{}@{}>;tag={}{}'.format(userA.telNr, userA.agent, userA.tagFrom, self.__RN))
 
     def __getCallID(self, userA: UserA) -> str:
         self.__writeSIPdata(
@@ -522,12 +546,12 @@ class SipMachine:
     def __readSIPdata(self):
         try:
             data = self.__f_sip.readline()
-            print('-', data.decode(), end='')
+            if debug:print('-', data.decode(), end='')
             if (data == b'\r\n'):
                 if (self.___contentLenght > 0):
                     data = self.__f_sip.read(self.___contentLenght).decode()
                     for k in data.split('\r\n'):
-                        print('*', k)
+                        if debug:print('*', k)
                         self.__parser(k.encode())
                 self.__exec()
             elif len(data) > 0:
@@ -536,7 +560,7 @@ class SipMachine:
             self.logger.error("exception from sock_read.recvfrom {}".format(e))
 
     def __writeSIPdata(self, message):
-        print(message, end='')
+        if debug:print(message, end='')
         self.__f_sip.write(message.encode())
 
     def __send(self, server_addressS):
@@ -572,16 +596,19 @@ class SipMachine:
         if __sock_SIP != None:
             self.__sock_SIP = __sock_SIP
         if self.__f_sip == None:
-            print('** on')
+            if debug:print('** on')
             self.__f_sip = self.__sock_SIP.makefile('rwb',0)
             self.__polling_object.register(self.__f_sip)
         self.__userB.viaB = ''
 
     def __closeConnection(self):
-        print('** off')
+        if debug:print('** off')
         self.__polling_object.unregister(self.__f_sip)
         self.__f_sip.close()
         self.__sock_SIP.close()
         self.__f_sip = None
         self.__sock_SIP = None
         gc.collect()
+
+
+
