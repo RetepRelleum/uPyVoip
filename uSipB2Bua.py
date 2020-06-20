@@ -47,3 +47,5 @@ while loop>=0:
             if keyPressed=='3':
                 sipMachine.play('/sd/warte.aLaw')
                 warte=True
+    else:
+        warte=False

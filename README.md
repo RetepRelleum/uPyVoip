@@ -1,10 +1,15 @@
 # uPyVoip
 Voip for MicroPython ESP32 and Python 3
+It is an interactive voice response for Micropython and Python 3
 
 Voip API for MicroPython tested on a Lolin d32 Pro under MicroPython version 1.12
 
-installation
-Copy aLAW.py, md5.py, sipMachine.py and tools.py into the directory /lib/uPySip
-Copy the file data.pcmA into the directory / sd. The file daten.pcma is encoded with a 500 Hz sinustoe PCMA. The file uSip is the program which can be executed in the root directory. The uSip file must be adapted to your environment.
+Installation
+Copy aLAW.py, md5.py, sipMachine.py and DTMF.py into the directory / lib / uPySip.
+The file uSipB2Bua.py
+Copy to the root directory. As well as your language files in Alaw format on the SD card.
 
 uPyVoip is a real Python implementation and adapted to MicroPython.
+
+You can create the language files using Audacity in PCM16 bit format with a sample rate of 8000 Hz and save them via Export-> Raw data. using conv.py you have to change them to Alaw format.
+
