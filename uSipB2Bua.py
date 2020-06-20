@@ -26,6 +26,7 @@ while loop>=0:
     if loop==sipMachine.RINGING:
         if int(sipMachine.getTelNrB())<300:
             sipMachine.acceptCall()
+            warte=False
     if sipMachine.IDLE!=loop:
         pass
         #print(loop)
@@ -47,5 +48,3 @@ while loop>=0:
             if keyPressed=='3':
                 sipMachine.play('/sd/warte.aLaw')
                 warte=True
-    else:
-        warte=False

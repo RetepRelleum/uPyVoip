@@ -1,4 +1,3 @@
-import _thread
 import uPySip.md5
 import utime
 import socket
@@ -8,7 +7,7 @@ import gc
 import sys
 import os
 
-debug=True
+debug=False
 
 def _randomChr(size):
     ret = ""
