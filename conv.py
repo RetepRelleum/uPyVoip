@@ -1,6 +1,6 @@
 import uPySip.aLaw
-l=open('/sd/a.aLaw','wb')
-f=open('/sd/wilk.raw','rb')
+l=open('/sd/info.aLaw','wb')
+f=open('/sd/info.raw','rb')
 b=True
 while b:
     b=f.read(2)

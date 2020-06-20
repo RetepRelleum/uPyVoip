@@ -1,7 +1,6 @@
-import uPySip.tools
 import uPySip.sipMachine
 import sys
-import time
+import utime
 import gc
 
 port=5060
@@ -20,6 +19,7 @@ else:
 sipMachine=uPySip.sipMachine.SipMachine(user='relleum', pwd='jutkk7x1',telNr=telId,userAgent="b2b.domain",userClient=client,proxyServer=server,proxyRegistrar=server)
 loop=True
 first =False
+warte=False
 
 while loop>=0:
     loop=sipMachine.loop()
@@ -34,9 +34,16 @@ while loop>=0:
             sipMachine.invite('222')
             first=False
     if sipMachine.ON_CALL==loop:
+        if warte and utime.ticks_ms()%5000==0:
+            sipMachine.play('/sd/warte.aLaw')
         keyPressed=sipMachine.getKeyPressed()
         if keyPressed!='':
             if keyPressed=='0':
-                sipMachine.bye()
-            elif keyPressed=='2':
-                sipMachine.play('/sd/data.pcmA')
+               sipMachine.play('/sd/wilk.aLaw')
+            if keyPressed=='1':
+               sipMachine.play('/sd/info.aLaw')
+            if keyPressed=='2':
+               sipMachine.play('/sd/info.aLaw')
+            if keyPressed=='3':
+                sipMachine.play('/sd/warte.aLaw')
+                warte=True

@@ -1,10 +1,8 @@
 import _thread
 import uPySip.md5
-import uPySip.tools
 import utime
 import socket
 import select
-import uPySip.aLaw
 import uPySip.DTMF
 import gc
 import sys
@@ -114,7 +112,7 @@ class SipMachine:
     __proxyServer = None
     __proxyRegistrar = None
     __port = 5060
-    __keyTimestamp=utime.ticks_ms()
+    __keyTimestamp=0
 
     def __init__(self:str, user:str, pwd:str, telNr:str, userAgent:str, userClient:str, proxyServer:str, proxyRegistrar:str='192.168.1.1', port:str=5060):
         """Init sipMachine
@@ -152,7 +150,7 @@ class SipMachine:
 
         self.__sipRegister(self.__userA, self.__auth)
         self.__call = False
-        self.__path='/sd/data.pcmA'
+        self.__path='/sd/wilk.aLaw'
 
     #    path=__file__.replace('sipMachine.py','data.pcmA')
     #    f=open(path,'wb')
@@ -246,8 +244,8 @@ class SipMachine:
             self.__userB.agent = self.__userA.agent
         else:
             self.__userB.agent = userAgent
-        self.__userA.callId = uPySip.tools.randomChr(7)
-        self.__userA.tagFrom = uPySip.tools.randomChr(30)
+        self.__userA.callId = _randomChr(7)
+        self.__userA.tagFrom =_randomChr(30)
         self.__userA.cSeq += 1
         self.__auth.nonce = None
         self.__sipInvite(self.__userB, self.__userA, self.__auth)
@@ -521,7 +519,7 @@ class SipMachine:
             self.__status = self.ON_CALL
             self.__closeConnection()
         elif self.CSeqTyp == self.__INVITE and self.responseCodes == 'INVITE sip:':
-            self.__userA.tagTo = uPySip.tools.randomChr(30)
+            self.__userA.tagTo = _randomChr(30)
             self.__sipRinging(self.__userB, self.__userA)
             self.__status = self.RINGING
         elif self.CSeqTyp == 'ACK' and self.responseCodes == 'ACK sip:':
@@ -582,9 +580,11 @@ class SipMachine:
             (data, proxyServer) = self.__sock.recvfrom(180)
             a = uPySip.DTMF.DTMF().getKey(data)
             if a[1] > 500000 :
-                if self.__keyTimestamp!=int.from_bytes(data[4:8],'big'):
+                if int.from_bytes(data[4:8],'big')-self.__keyTimestamp>3000:
                     self.__key = a[0]
                     self.__keyTimestamp=int.from_bytes(data[4:8],'big')
+
+
         except OSError as msg:
             print("Socket Error: {}".format(msg))
 
