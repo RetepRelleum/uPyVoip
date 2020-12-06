@@ -73,11 +73,16 @@ class Auth:
 
     def __getAuth(self, userB: UserB):
         a1 = '{}:{}:{}'.format(self.user, self.realm, self.pwd)
+        print("- "+a1)
         ha1 = uPySip.md5.md5(a1.encode()).hexdigest()
+        print("- "+ha1)
         a2 = '{}:sip:{}'.format(self.types, self.__getUri(userB))
+        print("- "+a2)
         ha2 = uPySip.md5.md5(a2.encode()).hexdigest()
+        print("- "+ha2)
         a3 = '{}:{}:{:0>8}:{}:{}:{}'.format(
             ha1, self.nonce, self.nonceCount, self.cnonce, self.qop, ha2)
+        print("- "+a3)
         return uPySip.md5.md5(a3.encode()).hexdigest()
 
     def getAuthorization(self, userB: UserB) -> str:
@@ -96,7 +101,6 @@ class Auth:
         ret = '{},nonce="{}"'.format(ret, self.nonce)
         ret = '{},opaque="",uri="sip:{}"'.format(ret, self.__getUri(userB))
         ret = '{},cnonce="{}"'.format(ret, self.cnonce)
-        ret = '{},nc={:0>8}'.format(ret, self.nonceCount)
         ret = '{},nc={:0>8}'.format(ret, self.nonceCount)
         ret = '{},algorithm=MD5,qop="auth",response="{}"{}'.format(
             ret, response, self.__RN)
@@ -404,7 +408,7 @@ class SipMachine:
         self.__writeSIPdata(self.__RN)
         self.__writeSIPdata(conten)
 
-    def __sipACK(self, userB: UserB, userA: UserA):
+    def __sipACK(self, userB: UserB, userA: UserA,d):
         self.__getACK(userB.telNr, userB.agent, self.__port)
         self.__getVia(userA)
         self.__getMaxForwards()

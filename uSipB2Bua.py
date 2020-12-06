@@ -7,8 +7,8 @@ port = 5060
 server = '192.168.1.1'
 client1 = '192.168.1.113'
 client2 = '192.168.1.119'
-telId1 = '225'
-telid2 = '226'
+telId1 = '220'
+telid2 = '225'
 if sys.platform == 'linux':
     client = client1
     telId = telId1
@@ -19,7 +19,7 @@ else:
 sipMachine = uPySip.sipMachine.SipMachine(user='relleum', pwd='jutkk7x1', telNr=telId,
                                           userAgent="b2b.domain", userClient=client, proxyServer=server, proxyRegistrar=server)
 loop = b'x00'
-first = False
+first = True
 warte = False
 
 while loop >= b'x00':
